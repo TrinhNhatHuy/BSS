@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  n8n:
+    image: n8nio/n8n:2.17.7
+    container_name: tv360_n8n
+    restart: always
+    environment:
+      GENERIC_TIMEZONE: Asia/Ho_Chi_Minh
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+    ports:
+      - "5679:5678"
