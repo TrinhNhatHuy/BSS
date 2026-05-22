@@ -1,13 +1,13 @@
 services:
   postgres:
-    image: postgres:16-alpine        # alpine = smaller image
+    image: postgres:16-alpine
     container_name: tv360_postgres
     environment:
       POSTGRES_DB:       ${POSTGRES_DB}
       POSTGRES_USER:     ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d
@@ -17,6 +17,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - bss-network
 
   backend:
     build:
@@ -36,6 +38,8 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    networks:
+      - bss-network
 
   frontend:
     build:
@@ -47,6 +51,29 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+    networks:
+      - bss-network
+
+  label-studio:
+    image: heartexlabs/label-studio:1.13.1
+    platform: linux/amd64
+    container_name: tv360_label_studio
+    ports:
+      - "8081:8080"
+    volumes:
+      - label-studio-data:/label-studio/data
+    environment:
+      - LABEL_STUDIO_HOST=${LS_HOST}
+      - CSRF_TRUSTED_ORIGINS=https://annalise-prehostile-infrequently.ngrok-free.dev,http://localhost:8081
+      - LABEL_STUDIO_DB_DIALECT=sqlite
+    restart: unless-stopped
+    networks:
+      - bss-network
 
 volumes:
   postgres_data:
+  label-studio-data:
+
+networks:
+  bss-network:
+    external: true
