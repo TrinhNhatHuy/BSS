@@ -1,6 +1,6 @@
 CREATE TABLE channel_group (
-                               id          BIGSERIAL   PRIMARY KEY,
-                               name        VARCHAR(50) NOT NULL,
+                               id          BIGSERIAL    PRIMARY KEY,
+                               name        VARCHAR(50)  NOT NULL,
                                create_time TIMESTAMP(6) DEFAULT NULL,
                                update_time TIMESTAMP(6) DEFAULT NULL
 );
@@ -10,8 +10,12 @@ CREATE TABLE source (
                         url         VARCHAR(500) DEFAULT NULL,
                         status      BOOLEAN      NOT NULL DEFAULT TRUE,
                         create_time TIMESTAMP(6) DEFAULT NULL,
-                        update_time TIMESTAMP(6) DEFAULT NULL
+                        update_time TIMESTAMP(6) DEFAULT NULL,
+                        priority    INTEGER
+                            CONSTRAINT chk_source_priority CHECK (priority IS NULL OR priority >= 1)
 );
+
+CREATE INDEX idx_source_priority ON source(priority);
 
 CREATE TABLE users (
                        id           BIGSERIAL    PRIMARY KEY,
@@ -64,6 +68,22 @@ CREATE TABLE channel_source (
 
 CREATE INDEX idx_cs_channel ON channel_source(channel_id);
 
+CREATE TABLE channel_export_id (
+                                   channel_id  VARCHAR(255) NOT NULL,
+                                   type        VARCHAR(10)  NOT NULL
+                                       CONSTRAINT chk_cei_type CHECK (type IN ('HD', 'SD', 'None')),
+                                   external_id VARCHAR(100) NOT NULL,
+                                   create_time TIMESTAMP(6) DEFAULT NULL,
+                                   update_time TIMESTAMP(6) DEFAULT NULL,
+                                   PRIMARY KEY (channel_id, type),
+                                   CONSTRAINT fk_cei_channel
+                                       FOREIGN KEY (channel_id) REFERENCES channel(id)
+                                           ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE INDEX idx_cei_channel ON channel_export_id(channel_id);
+CREATE INDEX idx_cei_type    ON channel_export_id(type);
+
 CREATE TABLE draft_batch (
                              id            BIGSERIAL    PRIMARY KEY,
                              channel_id    VARCHAR(255) NOT NULL,
@@ -98,10 +118,7 @@ CREATE TABLE program (
                          name           VARCHAR(500) DEFAULT NULL,
                          content        VARCHAR(500) DEFAULT NULL,
                          category       VARCHAR(20)  DEFAULT NULL
-                             CHECK (category IN (
-                                                 'SeriesVN', 'SeriesCN', 'SeriesKR',
-                                                 'Kids', 'Music', 'Sports', 'News', 'Others'
-                                 )),
+                             CHECK (category IN ('SeriesVN', 'SeriesFR', 'Kids', 'Music', 'Sports', 'News', 'Others')),
                          create_time    TIMESTAMP(6) DEFAULT NULL,
                          update_time    TIMESTAMP(6) DEFAULT NULL,
                          CONSTRAINT fk_program_channel
@@ -116,7 +133,6 @@ CREATE INDEX idx_program_channel       ON program(channel_id);
 CREATE INDEX idx_program_draft_batch   ON program(draft_batch_id);
 CREATE INDEX idx_program_channel_draft ON program(channel_id, draft_batch_id);
 CREATE INDEX idx_program_category      ON program(category);
-
 CREATE INDEX idx_program_live          ON program(channel_id, begin_time)
     WHERE draft_batch_id IS NULL;
 
@@ -170,10 +186,7 @@ CREATE TABLE program_label (
                                id           BIGSERIAL    PRIMARY KEY,
                                program_id   BIGINT       NOT NULL,
                                category     VARCHAR(20)  NOT NULL
-                                   CHECK (category IN (
-                                                       'SeriesVN', 'SeriesCN', 'SeriesKR',
-                                                       'Kids', 'Music', 'Sports', 'News', 'Others'
-                                       )),
+                                   CHECK (category IN ('SeriesVN', 'SeriesFR', 'Kids', 'Music', 'Sports', 'News', 'Others')),
                                label_source VARCHAR(20)  NOT NULL DEFAULT 'GEMINI'
                                    CHECK (label_source IN ('GEMINI', 'HUMAN', 'MODEL_V1', 'MODEL_V2')),
                                is_verified  BOOLEAN      NOT NULL DEFAULT FALSE,
@@ -188,18 +201,14 @@ CREATE TABLE program_label (
 
 CREATE INDEX idx_program_label_program  ON program_label(program_id);
 CREATE INDEX idx_program_label_category ON program_label(category);
-
 CREATE INDEX idx_program_label_training ON program_label(category)
     WHERE is_verified = TRUE;
 
 CREATE TABLE user_preference (
-                                 id          BIGSERIAL   PRIMARY KEY,
-                                 user_id     BIGINT      NOT NULL,
-                                 category    VARCHAR(20) NOT NULL
-                                     CHECK (category IN (
-                                                         'SeriesVN', 'SeriesCN', 'SeriesKR',
-                                                         'Kids', 'Music', 'Sports', 'News', 'Others'
-                                         )),
+                                 id          BIGSERIAL    PRIMARY KEY,
+                                 user_id     BIGINT       NOT NULL,
+                                 category    VARCHAR(20)  NOT NULL
+                                     CHECK (category IN ('SeriesVN', 'SeriesFR', 'Kids', 'Music', 'Sports', 'News', 'Others')),
                                  create_time TIMESTAMP(6) DEFAULT NULL,
                                  CONSTRAINT uk_user_preference UNIQUE (user_id, category),
                                  CONSTRAINT fk_up_user
@@ -227,11 +236,11 @@ CREATE INDEX idx_bookmark_user    ON user_bookmark(user_id);
 CREATE INDEX idx_bookmark_program ON user_bookmark(program_id);
 
 CREATE TABLE user_reminder (
-                               id          BIGSERIAL PRIMARY KEY,
-                               user_id     BIGINT    NOT NULL,
-                               program_id  BIGINT    NOT NULL,
+                               id          BIGSERIAL    PRIMARY KEY,
+                               user_id     BIGINT       NOT NULL,
+                               program_id  BIGINT       NOT NULL,
                                remind_at   TIMESTAMP(6) NOT NULL,
-                               is_sent     BOOLEAN   NOT NULL DEFAULT FALSE,
+                               is_sent     BOOLEAN      NOT NULL DEFAULT FALSE,
                                create_time TIMESTAMP(6) DEFAULT NULL,
                                update_time TIMESTAMP(6) DEFAULT NULL,
                                CONSTRAINT uk_user_reminder UNIQUE (user_id, program_id),
@@ -277,6 +286,7 @@ FOR t IN SELECT unnest(ARRAY[
                        'source',
                        'users',
                        'channel',
+                       'channel_export_id',
                        'draft_batch',
                        'program',
                        'reschedule_log',

@@ -5,7 +5,11 @@ import ProtectedRoute from './components/ProtectedRoute';
 
 // Pages
 import AuthPage        from './pages/AuthPage';
-import EditorDashboard from './pages/EditorDashboard';
+import EditorDashboard from './pages/EditorDashboard.jsx';
+import ManageChannels  from './pages/ChannelIndex.jsx';
+import ViewChannel     from './pages/ViewChannel.jsx';
+import ProgramIndex    from './pages/ProgramIndex.jsx';
+import ManageSources   from './pages/ManageSource.jsx';
 import Unauthorized    from './pages/Unauthorized';
 
 // Placeholders — replace with real pages when you build them
@@ -47,7 +51,11 @@ function App() {
 
                     {/* EDITOR-only routes */}
                     <Route element={<ProtectedRoute allowedRoles={['EDITOR']} />}>
-                        <Route path="/editor/dashboard" element={<EditorDashboard />} />
+                        <Route path="/editor/dashboard"      element={<EditorDashboard />} />
+                        <Route path="/editor/channels"       element={<ManageChannels />} />
+                        <Route path="/editor/channels/:id"   element={<ViewChannel />} />
+                        <Route path="/editor/programs"       element={<ProgramIndex />} />
+                        <Route path="/editor/sources"        element={<ManageSources />} />
                     </Route>
 
                     {/* ADMIN-only routes*/}
