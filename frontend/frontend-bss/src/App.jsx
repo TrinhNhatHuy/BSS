@@ -9,7 +9,9 @@ import EditorDashboard from './pages/EditorDashboard.jsx';
 import ManageChannels  from './pages/ChannelIndex.jsx';
 import ViewChannel     from './pages/ViewChannel.jsx';
 import ProgramIndex    from './pages/ProgramIndex.jsx';
+import ProgramDetails  from './pages/ProgramDetails.jsx';
 import ManageSources   from './pages/ManageSource.jsx';
+import RescheduleLogs  from './pages/RescheduleLogs.jsx';
 import Unauthorized    from './pages/Unauthorized';
 
 // Placeholders — replace with real pages when you build them
@@ -55,7 +57,9 @@ function App() {
                         <Route path="/editor/channels"       element={<ManageChannels />} />
                         <Route path="/editor/channels/:id"   element={<ViewChannel />} />
                         <Route path="/editor/programs"       element={<ProgramIndex />} />
+                        <Route path="/editor/programs/:id"   element={<ProgramDetails />} />
                         <Route path="/editor/sources"        element={<ManageSources />} />
+                        <Route path="/editor/reschedule-logs" element={<RescheduleLogs />} />
                     </Route>
 
                     {/* ADMIN-only routes*/}

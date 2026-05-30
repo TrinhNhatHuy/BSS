@@ -77,7 +77,7 @@ export default function EditorLayout({ activeItem, breadcrumb, headerRight, chil
                                 <p onClick={() => navigate('/editor/channels')} className={subItemClass('channels')}>Channels</p>
                                 <p onClick={() => navigate('/editor/programs')} className={subItemClass('programs')}>Programs</p>
                                 <p onClick={() => navigate('/editor/sources')} className={subItemClass('sources')}>Sources</p>
-                                <p className={subItemClass('reschedule-logs')}>Reschedule Logs</p>
+                                <p onClick={() => navigate('/editor/reschedule-logs')} className={subItemClass('reschedule-logs')}>Reschedule Logs</p>
                                 <p className={subItemClass('drafts')}>Drafts by AI</p>
                             </div>
                         )}

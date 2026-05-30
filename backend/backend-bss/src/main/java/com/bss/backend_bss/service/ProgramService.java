@@ -4,6 +4,7 @@ import com.bss.backend_bss.dto.program.ProgramFilter;
 import com.bss.backend_bss.dto.program.ProgramResponse;
 import com.bss.backend_bss.entity.Channel;
 import com.bss.backend_bss.entity.Program;
+import com.bss.backend_bss.exception.ResourceNotFoundException;
 import com.bss.backend_bss.repository.ChannelRepository;
 import com.bss.backend_bss.repository.ProgramRepository;
 import com.bss.backend_bss.specification.ProgramSpecifications;
@@ -60,6 +61,17 @@ public class ProgramService {
         return programs.stream()
                 .map(p -> toResponse(p, channelNames))
                 .toList();
+    }
+
+    /**
+     * Single program by id, used by the program detail page (ProgramDetails.jsx,
+     * reached from the View action on the ViewChannel timeline).
+     */
+    @Transactional(readOnly = true)
+    public ProgramResponse getById(Long id) {
+        Program program = programRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Program not found: " + id));
+        return toResponse(program, lookupChannelNames(List.of(program)));
     }
 
     private Map<String, String> lookupChannelNames(List<Program> programs) {

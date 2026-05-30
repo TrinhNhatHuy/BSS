@@ -10,6 +10,7 @@ import com.bss.backend_bss.exception.InvalidReferenceException;
 import com.bss.backend_bss.exception.ResourceNotFoundException;
 import com.bss.backend_bss.repository.ChannelGroupRepository;
 import com.bss.backend_bss.repository.ChannelRepository;
+import com.bss.backend_bss.repository.RescheduleLogRepository;
 import com.bss.backend_bss.repository.SourceRepository;
 import com.bss.backend_bss.repository.UserRepository;
 import com.bss.backend_bss.specification.ChannelSpecifications;
@@ -45,6 +46,7 @@ public class ChannelService {
     private final ChannelGroupRepository channelGroupRepository;
     private final SourceRepository sourceRepository;
     private final UserRepository userRepository;
+    private final RescheduleLogRepository rescheduleLogRepository;
     private final ChannelMapper channelMapper;
 
     // ============================================================
@@ -79,7 +81,12 @@ public class ChannelService {
         Map<Long, String> groupNames = lookupGroupNames(List.of(channel));
         Map<Long, String> usernames = lookupUsernames(List.of(channel));
 
-        return channelMapper.toResponse(channel, groupNames, usernames);
+        ChannelResponse response = channelMapper.toResponse(channel, groupNames, usernames);
+        String today = java.time.LocalDate.now()
+                .format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE); // yyyyMMdd
+        response.setRescheduleLogCount(
+                rescheduleLogRepository.countByChannelIdAndDate(channel.getId(), today));
+        return response;
     }
 
     // ============================================================

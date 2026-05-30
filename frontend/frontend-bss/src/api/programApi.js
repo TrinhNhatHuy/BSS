@@ -19,6 +19,10 @@ export const getPrograms = (filter = {}, page = 0, size = 20, sort) => {
 export const getProgramCategories = () =>
     axiosClient.get('/api/editor/programs/categories').then(res => res.data);
 
+/** Single program by id — backs the program detail page. */
+export const getProgramById = (id) =>
+    axiosClient.get(`/api/editor/programs/${id}`).then(res => res.data);
+
 /**
  * Live (non-draft) programs aired on a given date for a channel.
  * Used by the ViewChannel detail page.

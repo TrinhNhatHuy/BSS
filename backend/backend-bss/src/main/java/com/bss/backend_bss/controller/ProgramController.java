@@ -59,6 +59,12 @@ public class ProgramController {
         return ResponseEntity.ok(programService.listForChannelOnDate(channelId, target.format(YYYYMMDD)));
     }
 
+    /** Single program by id — backs the program detail page. */
+    @GetMapping("/{id}")
+    public ResponseEntity<ProgramResponse> getById(@PathVariable Long id) {
+        return ResponseEntity.ok(programService.getById(id));
+    }
+
     /** Category enum values, for the index-page filter dropdown. */
     @GetMapping("/categories")
     public ResponseEntity<List<String>> categories() {

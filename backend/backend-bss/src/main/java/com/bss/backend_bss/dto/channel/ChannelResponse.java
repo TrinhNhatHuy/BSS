@@ -36,6 +36,12 @@ public class ChannelResponse {
     private List<SourceDto> sources;
 
     private Integer numberOfReschedules;
+    /**
+     * Count of reschedule_log rows for this channel whose program is scheduled
+     * for today. Populated on the detail endpoint (getById) only; null on the
+     * list endpoint to avoid an extra count query per row.
+     */
+    private Long rescheduleLogCount;
     private Channel.AiUpdateStatus aiUpdateStatus;
     private LocalDateTime lastAiUpdateTime;
     private Long lastAiUpdateBy;

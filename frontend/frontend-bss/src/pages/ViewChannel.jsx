@@ -1,28 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-    ChevronRight, ChevronLeft, Calendar, RefreshCw, ArrowLeft, Clock,
-    MonitorPlay, AlertCircle, Loader2
+    ChevronRight, ChevronLeft, Calendar, RefreshCw, ArrowLeft,
+    MonitorPlay, AlertCircle, Loader2, Sparkles, Eye, History
 } from 'lucide-react';
 import EditorLayout from '../components/EditorLayout';
 import { getChannelById } from '../api/channelApi';
 import { getProgramsForChannel } from '../api/programApi';
 
-/** YYYYMMDDHHMMSS → "HH:MM" */
-function formatTime(yyyymmddhhmmss) {
-    if (!yyyymmddhhmmss || yyyymmddhhmmss.length < 12) return '—';
-    return `${yyyymmddhhmmss.slice(8, 10)}:${yyyymmddhhmmss.slice(10, 12)}`;
+/** YYYYMMDDHHMMSS → "YYYY-MM-DD HH:MM:SS" ('' if missing/invalid) */
+function formatFull(s) {
+    if (!s || s.length < 14) return '';
+    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)} ${s.slice(8, 10)}:${s.slice(10, 12)}:${s.slice(12, 14)}`;
 }
 
-/** Minutes between two YYYYMMDDHHMMSS values */
-function durationMinutes(begin, end) {
-    if (!begin || !end || begin.length < 12 || end.length < 12) return null;
-    const toDate = (s) => new Date(
-        +s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8),
-        +s.slice(8, 10), +s.slice(10, 12), +s.slice(12, 14) || 0
-    );
-    const diffMs = toDate(end) - toDate(begin);
-    return diffMs > 0 ? Math.round(diffMs / 60000) : null;
+/** ISO LocalDateTime ("2026-05-24T14:30:22") → "2026-05-24 14:30:22" ('' if null) */
+function formatDateTime(iso) {
+    if (!iso) return '';
+    return iso.replace('T', ' ').slice(0, 19);
 }
 
 /** Date → "YYYY-MM-DD" (local) for both the API and <input type="date"> */
@@ -45,6 +40,16 @@ function categoryColor(category) {
     }
 }
 
+/** A single label/value row inside the Channel Details card. */
+function DetailItem({ label, children }) {
+    return (
+        <div>
+            <p className="text-xs text-[#6C755E] font-medium uppercase tracking-wide mb-1">{label}</p>
+            <div className="text-sm font-semibold text-[#2C3325]">{children}</div>
+        </div>
+    );
+}
+
 export default function ViewChannel() {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -62,6 +67,7 @@ export default function ViewChannel() {
 
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [refreshKey, setRefreshKey] = useState(0);
+    const [aiNotice, setAiNotice] = useState(false);
 
     // Load channel detail
     useEffect(() => {
@@ -75,7 +81,7 @@ export default function ViewChannel() {
                 });
             });
         return () => { cancelled = true; };
-    }, [id]);
+    }, [id, refreshKey]);
 
     // Load programs for the selected date
     useEffect(() => {
@@ -118,208 +124,216 @@ export default function ViewChannel() {
 
     return (
         <EditorLayout activeItem="channels" breadcrumb={breadcrumb}>
-            <div className="p-4 sm:p-6 lg:p-8">
+            <div className="p-4 sm:p-6 lg:p-8 space-y-6">
 
-                {/* Top: title + date navigator */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => navigate('/editor/channels')}
-                            className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-[#6C755E] transition-colors shadow-sm"
-                        >
-                            <ArrowLeft className="w-5 h-5" />
-                        </button>
-                        <h1 className="text-2xl font-bold text-[#2C3325] flex items-center gap-2">
-                            <MonitorPlay className="w-6 h-6 text-[#94A973]" />
-                            {channel?.name || id} <span className="text-gray-300 font-normal">Schedule</span>
-                        </h1>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        {!isToday && (
-                            <button
-                                onClick={() => setSelectedDate(new Date())}
-                                className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-[#6C755E] font-medium transition-colors shadow-sm"
-                            >
-                                Today
-                            </button>
-                        )}
-                        <div className="flex items-center bg-white border border-gray-200 rounded-lg p-1 shadow-sm">
-                            <button onClick={() => changeDate(-1)} className="p-2 text-[#6C755E] hover:bg-gray-50 rounded-md transition-colors" title="Previous day">
-                                <ChevronLeft className="w-5 h-5" />
-                            </button>
-                            <label className="flex items-center gap-2 px-3 cursor-pointer">
-                                <Calendar className="w-4 h-4 text-[#94A973]" />
-                                <input
-                                    type="date"
-                                    value={toIsoDate(selectedDate)}
-                                    onChange={onDateInputChange}
-                                    className="bg-transparent font-semibold text-[#4A533E] text-sm outline-none cursor-pointer"
-                                />
-                            </label>
-                            <button onClick={() => changeDate(1)} className="p-2 text-[#6C755E] hover:bg-gray-50 rounded-md transition-colors" title="Next day">
-                                <ChevronRight className="w-5 h-5" />
-                            </button>
-                        </div>
-                    </div>
+                {/* Top: back + title */}
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => navigate('/editor/channels')}
+                        className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-[#6C755E] transition-colors shadow-sm"
+                    >
+                        <ArrowLeft className="w-5 h-5" />
+                    </button>
+                    <h1 className="text-2xl font-bold text-[#2C3325] flex items-center gap-2">
+                        <MonitorPlay className="w-6 h-6 text-[#94A973]" />
+                        {channel?.name || id} <span className="text-gray-300 font-normal">Schedule</span>
+                    </h1>
                 </div>
 
                 {/* Channel error */}
                 {channelError && (
-                    <div className="mb-4 flex items-center gap-2 p-4 bg-rose-50 border border-rose-200 rounded-lg text-rose-700">
+                    <div className="flex items-center gap-2 p-4 bg-rose-50 border border-rose-200 rounded-lg text-rose-700">
                         <AlertCircle className="w-5 h-5 shrink-0" />
                         <span className="text-sm">{channelError}</span>
                     </div>
                 )}
 
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                {/* ============================================================ */}
+                {/* CHANNEL DETAILS — full width, on top                         */}
+                {/* ============================================================ */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 sm:p-6">
+                    <h3 className="font-bold text-[#2C3325] text-lg mb-5">Channel Details</h3>
 
-                    {/* LEFT: Channel info */}
-                    <div className="lg:col-span-1 space-y-6">
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-                            <h3 className="font-bold text-[#2C3325] text-lg mb-4">Channel Details</h3>
+                    {channelLoading ? (
+                        <Loader2 className="w-6 h-6 animate-spin text-[#94A973]" />
+                    ) : channel ? (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-5">
+                            <DetailItem label="ID">
+                                <span className="font-mono">{channel.id}</span>
+                            </DetailItem>
 
-                            {channelLoading ? (
-                                <Loader2 className="w-6 h-6 animate-spin text-[#94A973]" />
-                            ) : channel ? (
-                                <div className="space-y-4 text-sm">
-                                    <div>
-                                        <p className="text-[#6C755E] font-medium mb-1">ID</p>
-                                        <p className="font-mono font-semibold text-[#2C3325]">{channel.id}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-[#6C755E] font-medium mb-1">Group</p>
-                                        <p className="font-semibold text-[#2C3325]">
-                                            {channel.channelGroupName || <span className="text-gray-300">—</span>}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-[#6C755E] font-medium mb-1">Sources</p>
-                                        <p className="text-[#2C3325]">
-                                            {channel.sources?.length > 0
-                                                ? channel.sources.map(s => s.name).join(', ')
-                                                : <span className="text-gray-300">—</span>}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-[#6C755E] font-medium mb-1">Export IDs</p>
-                                        {channel.exportIds?.length > 0 ? (
-                                            <div className="flex flex-wrap gap-1.5">
-                                                {channel.exportIds.map(e => (
-                                                    <span key={e.type} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#F4F5F0] border border-[#E4E3CE] rounded text-xs">
-                                                        <span className="font-bold text-[#4A533E]">{e.type}</span>
-                                                        <span className="font-mono text-gray-600">{e.externalId}</span>
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        ) : <span className="text-gray-300 text-sm">—</span>}
-                                    </div>
-                                    <div>
-                                        <p className="text-[#6C755E] font-medium mb-1">AI Status</p>
-                                        <span className={`inline-flex px-2.5 py-1 text-xs font-bold rounded-full ${
-                                            channel.aiUpdateStatus === 'UPDATED'
-                                                ? 'bg-emerald-100 text-emerald-700'
-                                                : 'bg-gray-100 text-gray-500'
-                                        }`}>
-                                            {channel.aiUpdateStatus === 'UPDATED' ? 'Updated' : 'Not Updated'}
-                                        </span>
-                                    </div>
-                                    <div className="pt-4 border-t border-gray-100">
-                                        <p className="text-[#6C755E] font-medium mb-1">Programs on selected date</p>
-                                        <div className="bg-[#F4F5F0] p-3 rounded-lg border border-[#E4E3CE] mt-2">
-                                            <p className="text-2xl font-bold text-[#4A533E]">{programs.length}</p>
-                                            <p className="text-xs text-[#6C755E] mt-1">Total</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : null}
+                            <DetailItem label="Channel Name">{channel.name}</DetailItem>
 
-                            <div className="mt-6">
+                            <DetailItem label="Channel Group">
+                                {channel.channelGroupName}
+                            </DetailItem>
+
+                            <DetailItem label="Schedule Changes (today)">
+                                <span className="inline-flex items-center gap-1.5">
+                                    <History className="w-4 h-4 text-[#94A973]" />
+                                    {channel.rescheduleLogCount ?? 0}
+                                    <span className="text-xs font-normal text-[#6C755E]">reschedule logs</span>
+                                </span>
+                            </DetailItem>
+
+                            <DetailItem label="Create Time">{formatDateTime(channel.createTime)}</DetailItem>
+
+                            <DetailItem label="Last Modified Time">{formatDateTime(channel.updateTime)}</DetailItem>
+
+                            <div className="col-span-2 lg:col-span-2">
+                                <p className="text-xs text-[#6C755E] font-medium uppercase tracking-wide mb-1">Sources</p>
+                                {channel.sources?.length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {channel.sources.map(s => (
+                                            <span key={s.name} className="inline-flex items-center px-2.5 py-1 bg-[#F4F5F0] border border-[#E4E3CE] rounded-md text-xs font-semibold text-[#4A533E]">
+                                                {s.name}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ) : null}
+                </div>
+
+                {/* ============================================================ */}
+                {/* BROADCAST TIMELINE — below                                   */}
+                {/* ============================================================ */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col min-h-[400px]">
+
+                    {/* Card header: title + Clean with AI + date picker + refresh */}
+                    <div className="p-4 border-b border-gray-100 bg-[#FAFAFA] flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                        <h3 className="font-bold text-[#2C3325]">
+                            Broadcast Timeline
+                            <span className="text-[#6C755E] font-normal text-sm ml-2">
+                                {selectedDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                            </span>
+                        </h3>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                            {/* Clean with AI */}
+                            <button
+                                onClick={() => setAiNotice(true)}
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg bg-[#94A973] text-white hover:bg-[#7e9460] transition-colors shadow-sm"
+                                title="Run AI cleaning on this channel's schedule"
+                            >
+                                <Sparkles className="w-4 h-4" /> Clean with AI
+                            </button>
+
+                            {/* Date picker */}
+                            {!isToday && (
                                 <button
-                                    onClick={() => setRefreshKey(k => k + 1)}
-                                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-white border border-[#94A973] text-[#6C755E] font-medium rounded-lg hover:bg-[#F4F5F0] transition-colors"
+                                    onClick={() => setSelectedDate(new Date())}
+                                    className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-[#6C755E] font-medium transition-colors"
                                 >
-                                    <RefreshCw className="w-4 h-4" /> Reload Programs
+                                    Today
+                                </button>
+                            )}
+                            <div className="flex items-center bg-white border border-gray-200 rounded-lg p-1">
+                                <button onClick={() => changeDate(-1)} className="p-1.5 text-[#6C755E] hover:bg-gray-50 rounded-md transition-colors" title="Previous day">
+                                    <ChevronLeft className="w-4 h-4" />
+                                </button>
+                                <label className="flex items-center gap-2 px-2 cursor-pointer">
+                                    <Calendar className="w-4 h-4 text-[#94A973]" />
+                                    <input
+                                        type="date"
+                                        value={toIsoDate(selectedDate)}
+                                        onChange={onDateInputChange}
+                                        className="bg-transparent font-semibold text-[#4A533E] text-sm outline-none cursor-pointer"
+                                    />
+                                </label>
+                                <button onClick={() => changeDate(1)} className="p-1.5 text-[#6C755E] hover:bg-gray-50 rounded-md transition-colors" title="Next day">
+                                    <ChevronRight className="w-4 h-4" />
                                 </button>
                             </div>
+
+                            {/* Refresh */}
+                            <button
+                                onClick={() => setRefreshKey(k => k + 1)}
+                                className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-[#94A973] text-[#6C755E] hover:text-[#4A533E] hover:bg-[#F4F5F0] font-medium rounded-lg transition-colors"
+                                title="Reload latest schedule data"
+                            >
+                                <RefreshCw className={`w-4 h-4 ${programsLoading ? 'animate-spin' : ''}`} /> Refresh
+                            </button>
                         </div>
                     </div>
 
-                    {/* RIGHT: Program timeline */}
-                    <div className="lg:col-span-3">
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full min-h-[500px]">
-
-                            <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-[#FAFAFA]">
-                                <h3 className="font-bold text-[#2C3325]">
-                                    Broadcast Timeline — {selectedDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                                </h3>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto">
-                                {programsError && (
-                                    <div className="m-4 flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
-                                        <AlertCircle className="w-4 h-4 shrink-0" /> {programsError}
-                                    </div>
-                                )}
-
-                                {programsLoading ? (
-                                    <div className="p-12 text-center">
-                                        <Loader2 className="w-8 h-8 animate-spin mx-auto text-[#94A973]" />
-                                    </div>
-                                ) : programs.length === 0 ? (
-                                    <div className="p-12 text-center text-gray-400 text-sm">
-                                        No programs scheduled for this date.
-                                    </div>
-                                ) : (
-                                    <table className="w-full text-left border-collapse">
-                                        <thead>
-                                            <tr className="bg-white border-b border-gray-100 text-xs font-bold text-[#6C755E] uppercase tracking-wide">
-                                                <th className="p-4 w-28">Time</th>
-                                                <th className="p-4">Program Details</th>
-                                                <th className="p-4 hidden md:table-cell w-32">Category</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-50">
-                                            {programs.map(p => {
-                                                const dur = durationMinutes(p.beginTime, p.endTime);
-                                                return (
-                                                    <tr key={p.id} className="hover:bg-[#FAFAFA] transition-colors">
-                                                        <td className="p-4 align-top">
-                                                            <div className="font-bold text-[#4A533E] text-base">{formatTime(p.beginTime)}</div>
-                                                            <div className="text-xs text-[#6C755E] mt-1">
-                                                                → {formatTime(p.endTime)}
-                                                            </div>
-                                                            {dur !== null && (
-                                                                <div className="text-xs text-[#6C755E] mt-1 flex items-center gap-1">
-                                                                    <Clock className="w-3 h-3" /> {dur} min
-                                                                </div>
-                                                            )}
-                                                        </td>
-                                                        <td className="p-4 align-top">
-                                                            <p className="font-semibold text-[#2C3325] text-base">
-                                                                {p.name || <span className="text-gray-300 italic">(no title)</span>}
-                                                            </p>
-                                                            {p.content && (
-                                                                <p className="text-xs text-[#6C755E] mt-1 line-clamp-2">{p.content}</p>
-                                                            )}
-                                                        </td>
-                                                        <td className="p-4 align-top hidden md:table-cell">
-                                                            {p.category ? (
-                                                                <span className={`inline-flex items-center px-2.5 py-1 text-xs font-bold rounded-md border ${categoryColor(p.category)}`}>
-                                                                    {p.category}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-gray-300 text-sm">—</span>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                )}
-                            </div>
+                    {/* Clean-with-AI notice (no AI backend wired yet) */}
+                    {aiNotice && (
+                        <div className="m-4 flex items-start gap-2 p-3 bg-[#F4F5F0] border border-[#E4E3CE] rounded-lg text-[#4A533E] text-sm">
+                            <Sparkles className="w-4 h-4 shrink-0 mt-0.5 text-[#94A973]" />
+                            <span className="flex-1">AI cleaning isn’t connected to a backend yet — this button is a placeholder for the upcoming schedule-cleaning pipeline.</span>
+                            <button onClick={() => setAiNotice(false)} className="text-[#6C755E] hover:text-[#2C3325] font-bold">×</button>
                         </div>
+                    )}
+
+                    {/* Table */}
+                    <div className="flex-1 overflow-x-auto">
+                        {programsError && (
+                            <div className="m-4 flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
+                                <AlertCircle className="w-4 h-4 shrink-0" /> {programsError}
+                            </div>
+                        )}
+
+                        {programsLoading ? (
+                            <div className="p-12 text-center">
+                                <Loader2 className="w-8 h-8 animate-spin mx-auto text-[#94A973]" />
+                            </div>
+                        ) : programs.length === 0 ? (
+                            <div className="p-12 text-center text-gray-400 text-sm">
+                                No programs scheduled for this date.
+                            </div>
+                        ) : (
+                            <table className="w-full text-left border-collapse min-w-[1000px]">
+                                <thead>
+                                    <tr className="bg-[#F4F5F0] border-b border-gray-200 text-xs font-bold text-[#6C755E] uppercase tracking-wide">
+                                        <th className="p-4">Program Name</th>
+                                        <th className="p-4">Content</th>
+                                        <th className="p-4 w-32">Category</th>
+                                        <th className="p-4 w-44">Start Time</th>
+                                        <th className="p-4 w-44">End Time</th>
+                                        <th className="p-4 w-24 text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {programs.map(p => (
+                                        <tr key={p.id} className="hover:bg-[#FAFAFA] transition-colors">
+                                            <td className="p-4 align-top">
+                                                <p className="font-semibold text-[#2C3325]">{p.name}</p>
+                                            </td>
+                                            <td className="p-4 align-top">
+                                                {p.content && (
+                                                    <p className="text-sm text-[#6C755E] line-clamp-2 max-w-md">{p.content}</p>
+                                                )}
+                                            </td>
+                                            <td className="p-4 align-top">
+                                                {p.category && (
+                                                    <span className={`inline-flex items-center px-2.5 py-1 text-xs font-bold rounded-md border ${categoryColor(p.category)}`}>
+                                                        {p.category}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="p-4 align-top font-bold text-[#4A533E] whitespace-nowrap">
+                                                {formatFull(p.beginTime)}
+                                            </td>
+                                            <td className="p-4 align-top text-[#6C755E] whitespace-nowrap">
+                                                {formatFull(p.endTime)}
+                                            </td>
+                                            <td className="p-4 align-top text-right">
+                                                <button
+                                                    onClick={() => navigate(`/editor/programs/${p.id}`)}
+                                                    className="inline-flex items-center gap-1 text-[#94A973] hover:text-[#4A533E] font-medium text-sm transition-colors"
+                                                    title="View program details"
+                                                >
+                                                    <Eye className="w-4 h-4" />
+                                                    <span className="hidden sm:inline">View</span>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
                     </div>
                 </div>
             </div>
