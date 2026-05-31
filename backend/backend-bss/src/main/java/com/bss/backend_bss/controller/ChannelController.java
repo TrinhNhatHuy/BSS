@@ -1,6 +1,7 @@
 package com.bss.backend_bss.controller;
 
 import com.bss.backend_bss.dto.channel.*;
+import com.bss.backend_bss.entity.ChannelExportId;
 import com.bss.backend_bss.service.ChannelService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +12,9 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Editor-only channel management endpoints.
@@ -41,6 +45,20 @@ public class ChannelController {
             @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.ASC) Pageable pageable
     ) {
         return ResponseEntity.ok(channelService.list(filter, pageable));
+    }
+
+    /**
+     * GET /api/editor/channels/export-types
+     *
+     * Export-id type enum values (HD | SD | None), for the Channels filter
+     * dropdown and the export page. Declared before /{id} so "export-types"
+     * isn't captured as a channel id.
+     */
+    @GetMapping("/export-types")
+    public ResponseEntity<List<String>> exportTypes() {
+        return ResponseEntity.ok(
+                Arrays.stream(ChannelExportId.ExportType.values()).map(Enum::name).toList()
+        );
     }
 
     /**

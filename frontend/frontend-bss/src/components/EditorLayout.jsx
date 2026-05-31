@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Menu, ChevronDown, ChevronRight, LayoutDashboard,
@@ -94,7 +94,7 @@ export default function EditorLayout({ activeItem, breadcrumb, headerRight, chil
                         </button>
                         {expandedMenus.tools && (
                             <div className="pl-11 pr-3 py-2 space-y-1 text-sm text-[#6C755E]">
-                                <p className={subItemClass('export-xlsx')}>Export XLSX</p>
+                                <p onClick={() => navigate('/editor/export')} className={subItemClass('export-xlsx')}>Export XLSX</p>
                                 <p className={subItemClass('import-xlsx')}>Import XLSX</p>
                             </div>
                         )}

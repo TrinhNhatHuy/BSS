@@ -161,8 +161,9 @@ public class SecurityConfig {
         // Allow all standard headers + the Authorization header for JWT
         config.setAllowedHeaders(List.of("*"));
 
-        // Expose Authorization response header so axios can read it if needed
-        config.setExposedHeaders(List.of("Authorization"));
+        // Expose Authorization so axios can read it if needed, and
+        // Content-Disposition so the export download can read the file name.
+        config.setExposedHeaders(List.of("Authorization", "Content-Disposition"));
 
         // Required when allowCredentials is true (e.g., if you later add cookies)
         // Set to false if you don't need cookies

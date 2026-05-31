@@ -1,4 +1,3 @@
-import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext.jsx';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -12,6 +11,7 @@ import ProgramIndex    from './pages/ProgramIndex.jsx';
 import ProgramDetails  from './pages/ProgramDetails.jsx';
 import ManageSources   from './pages/ManageSource.jsx';
 import RescheduleLogs  from './pages/RescheduleLogs.jsx';
+import ExportXLSX      from './pages/ExportXLSX.jsx';
 import Unauthorized    from './pages/Unauthorized';
 
 // Placeholders — replace with real pages when you build them
@@ -60,6 +60,7 @@ function App() {
                         <Route path="/editor/programs/:id"   element={<ProgramDetails />} />
                         <Route path="/editor/sources"        element={<ManageSources />} />
                         <Route path="/editor/reschedule-logs" element={<RescheduleLogs />} />
+                        <Route path="/editor/export"          element={<ExportXLSX />} />
                     </Route>
 
                     {/* ADMIN-only routes*/}

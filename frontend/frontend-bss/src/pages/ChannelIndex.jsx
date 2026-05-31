@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Search, X, Edit2, Trash2, Plus, Eye,
@@ -7,7 +7,7 @@ import {
 import EditorLayout from '../components/EditorLayout';
 import { getChannels, createChannel, updateChannel, deleteChannel, getExportTypes } from '../api/channelApi';
 
-const EMPTY_FORM = { id: '', name: '', channelGroupId: '', sources: '' };
+const EMPTY_FORM = { id: '', name: '', channelGroupId: '', sources: '', exportIds: [] };
 const PAGE_SIZE = 20;
 
 function formatDateTime(dt) {
@@ -30,6 +30,79 @@ function PageButton({ page, current, onClick }) {
         >
             {page + 1}
         </button>
+    );
+}
+
+/**
+ * Editable list of export-ID rows (type + external id). Controlled: the parent
+ * owns `rows` and receives the next array via `onChange`. One row per type — the
+ * dropdown only offers types not already used by another row, since the backend
+ * rejects duplicate types. Shared by the full channel modal and the per-row
+ * quick-edit modal.
+ */
+function ExportIdsFields({ rows, exportTypes, onChange }) {
+    const usedTypes = rows.map(r => r.type);
+    const availableTypes = exportTypes.filter(t => !usedTypes.includes(t));
+
+    const add = () => {
+        if (availableTypes.length === 0) return;
+        onChange([...rows, { type: availableTypes[0], externalId: '' }]);
+    };
+    const update = (i, field, value) =>
+        onChange(rows.map((r, idx) => (i === idx ? { ...r, [field]: value } : r)));
+    const remove = (i) => onChange(rows.filter((_, idx) => i !== idx));
+
+    return (
+        <div>
+            <div className="flex justify-between items-center mb-1">
+                <label className="block text-sm font-bold text-[#6C755E]">Export IDs</label>
+                <button
+                    type="button"
+                    onClick={add}
+                    disabled={availableTypes.length === 0}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#94A973] hover:text-[#4A533E] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                    <Plus className="w-3.5 h-3.5" /> Add
+                </button>
+            </div>
+
+            {rows.length === 0 ? (
+                <p className="text-xs text-gray-400">No export IDs. These are the channel&apos;s external broadcast IDs included in the XLSX export.</p>
+            ) : (
+                <div className="space-y-2">
+                    {rows.map((row, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                            <select
+                                value={row.type}
+                                onChange={(e) => update(i, 'type', e.target.value)}
+                                className="px-2 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#94A973] text-sm bg-white"
+                            >
+                                {/* current value + types not used by another row */}
+                                {[row.type, ...availableTypes].map(t => (
+                                    <option key={t} value={t}>{t}</option>
+                                ))}
+                            </select>
+                            <input
+                                type="text"
+                                value={row.externalId}
+                                onChange={(e) => update(i, 'externalId', e.target.value)}
+                                placeholder="External ID"
+                                maxLength={100}
+                                className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#94A973] text-sm font-mono"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => remove(i)}
+                                className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors shrink-0"
+                                title="Remove"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -62,6 +135,11 @@ export default function ManageChannels() {
     const [formData, setFormData] = useState(EMPTY_FORM);
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState(null);
+
+    // Per-row "edit export IDs" quick modal (opened from the Export IDs column)
+    const [exportEdit, setExportEdit] = useState(null); // { channel, rows } | null
+    const [exportSaving, setExportSaving] = useState(false);
+    const [exportError, setExportError] = useState(null);
 
     // Load export types once for the filter dropdown
     useEffect(() => {
@@ -122,6 +200,7 @@ export default function ManageChannels() {
             name: channel.name,
             channelGroupId: channel.channelGroupId ?? '',
             sources: channel.sources?.map(s => s.name).join(', ') ?? '',
+            exportIds: channel.exportIds?.map(e => ({ type: e.type, externalId: e.externalId })) ?? [],
         });
         setFormError(null);
         setIsModalOpen(true);
@@ -136,12 +215,16 @@ export default function ManageChannels() {
             ? formData.sources.split(',').map(s => s.trim()).filter(Boolean)
             : [];
         const channelGroupId = formData.channelGroupId !== '' ? Number(formData.channelGroupId) : null;
+        // Drop rows with a blank external id; trim what's left.
+        const exportIds = formData.exportIds
+            .map(row => ({ type: row.type, externalId: row.externalId.trim() }))
+            .filter(row => row.externalId);
 
         try {
             if (modalMode === 'add') {
-                await createChannel({ id: formData.id, name: formData.name, channelGroupId, sources });
+                await createChannel({ id: formData.id, name: formData.name, channelGroupId, sources, exportIds });
             } else {
-                await updateChannel(editingId, { name: formData.name, channelGroupId, sources });
+                await updateChannel(editingId, { name: formData.name, channelGroupId, sources, exportIds });
             }
             setIsModalOpen(false);
             triggerRefresh();
@@ -159,6 +242,43 @@ export default function ManageChannels() {
             triggerRefresh();
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to delete channel.');
+        }
+    };
+
+    // --- Per-row export IDs quick edit ---
+    const openExportEdit = (channel) => {
+        setExportError(null);
+        setExportEdit({
+            channel,
+            rows: channel.exportIds?.map(e => ({ type: e.type, externalId: e.externalId })) ?? [],
+        });
+    };
+
+    const saveExportEdit = async () => {
+        if (!exportEdit) return;
+        setExportSaving(true);
+        setExportError(null);
+
+        const { channel, rows } = exportEdit;
+        // PUT replaces the whole channel, so preserve its other fields and only
+        // change exportIds. Drop blank rows and trim.
+        const exportIds = rows
+            .map(r => ({ type: r.type, externalId: r.externalId.trim() }))
+            .filter(r => r.externalId);
+
+        try {
+            await updateChannel(channel.id, {
+                name: channel.name,
+                channelGroupId: channel.channelGroupId ?? null,
+                sources: channel.sources?.map(s => s.name) ?? [],
+                exportIds,
+            });
+            setExportEdit(null);
+            triggerRefresh();
+        } catch (err) {
+            setExportError(err.response?.data?.message || 'Failed to save export IDs.');
+        } finally {
+            setExportSaving(false);
         }
     };
 
@@ -285,21 +405,30 @@ export default function ManageChannels() {
                                                     : <span className="text-gray-300">—</span>}
                                             </td>
                                             <td className="p-4 text-sm hidden lg:table-cell">
-                                                {channel.exportIds?.length > 0 ? (
-                                                    <div className="flex flex-wrap gap-1">
-                                                        {channel.exportIds.map(e => (
-                                                            <span
-                                                                key={`${channel.id}-${e.type}`}
-                                                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#F4F5F0] border border-[#E4E3CE] rounded text-xs"
-                                                            >
-                                                                <span className="font-bold text-[#4A533E]">{e.type}</span>
-                                                                <span className="font-mono text-gray-600">{e.externalId}</span>
-                                                            </span>
-                                                        ))}
+                                                <div className="flex items-start gap-2">
+                                                    <div className="flex flex-wrap gap-1 flex-1 min-w-0">
+                                                        {channel.exportIds?.length > 0 ? (
+                                                            channel.exportIds.map(e => (
+                                                                <span
+                                                                    key={`${channel.id}-${e.type}`}
+                                                                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#F4F5F0] border border-[#E4E3CE] rounded text-xs"
+                                                                >
+                                                                    <span className="font-bold text-[#4A533E]">{e.type}</span>
+                                                                    <span className="font-mono text-gray-600">{e.externalId}</span>
+                                                                </span>
+                                                            ))
+                                                        ) : (
+                                                            <span className="text-gray-300">—</span>
+                                                        )}
                                                     </div>
-                                                ) : (
-                                                    <span className="text-gray-300">—</span>
-                                                )}
+                                                    <button
+                                                        onClick={() => openExportEdit(channel)}
+                                                        className="p-1 text-[#94A973] hover:bg-[#F4F5F0] rounded transition-colors shrink-0"
+                                                        title="Edit export IDs"
+                                                    >
+                                                        <Edit2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </div>
                                             </td>
                                             <td className="p-4">
                                                 <span className={`inline-flex px-2.5 py-1 text-xs font-bold rounded-full ${
@@ -382,8 +511,8 @@ export default function ManageChannels() {
             {/* ADD / EDIT MODAL */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
-                        <div className="flex justify-between items-center p-5 border-b border-gray-100">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col">
+                        <div className="flex justify-between items-center p-5 border-b border-gray-100 shrink-0">
                             <h3 className="text-xl font-bold text-[#2C3325]">
                                 {modalMode === 'add' ? 'Add New Channel' : `Edit: ${editingId}`}
                             </h3>
@@ -392,7 +521,7 @@ export default function ManageChannels() {
                             </button>
                         </div>
 
-                        <form onSubmit={handleSave} className="p-5 space-y-4">
+                        <form onSubmit={handleSave} className="p-5 space-y-4 overflow-y-auto">
                             {formError && (
                                 <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
                                     <AlertCircle className="w-4 h-4 shrink-0" />
@@ -458,6 +587,13 @@ export default function ManageChannels() {
                                 <p className="text-xs text-gray-400 mt-1">Comma-separated source names. Must exist in the system.</p>
                             </div>
 
+                            {/* Export IDs — external broadcast IDs per type (HD/SD/...), used by the XLSX export */}
+                            <ExportIdsFields
+                                rows={formData.exportIds}
+                                exportTypes={exportTypes}
+                                onChange={(rows) => setFormData(prev => ({ ...prev, exportIds: rows }))}
+                            />
+
                             <div className="flex gap-3 pt-4 mt-2 border-t border-gray-100">
                                 <button
                                     type="button"
@@ -476,6 +612,59 @@ export default function ManageChannels() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* QUICK-EDIT EXPORT IDS MODAL (opened from the Export IDs column) */}
+            {exportEdit && (
+                <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col">
+                        <div className="flex justify-between items-center p-5 border-b border-gray-100 shrink-0">
+                            <div className="min-w-0">
+                                <h3 className="text-xl font-bold text-[#2C3325] truncate">Export IDs</h3>
+                                <p className="text-xs text-gray-400 truncate">
+                                    {exportEdit.channel.name} <span className="font-mono">({exportEdit.channel.id})</span>
+                                </p>
+                            </div>
+                            <button onClick={() => setExportEdit(null)} className="text-gray-400 hover:text-gray-600 transition-colors shrink-0">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="p-5 space-y-4 overflow-y-auto">
+                            {exportError && (
+                                <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
+                                    <AlertCircle className="w-4 h-4 shrink-0" />
+                                    {exportError}
+                                </div>
+                            )}
+
+                            <ExportIdsFields
+                                rows={exportEdit.rows}
+                                exportTypes={exportTypes}
+                                onChange={(rows) => setExportEdit(prev => ({ ...prev, rows }))}
+                            />
+
+                            <div className="flex gap-3 pt-4 mt-2 border-t border-gray-100">
+                                <button
+                                    type="button"
+                                    onClick={() => setExportEdit(null)}
+                                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={saveExportEdit}
+                                    disabled={exportSaving}
+                                    className="flex-1 px-4 py-2 bg-[#94A973] text-white font-medium rounded-lg hover:bg-[#8A9F6B] transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                                >
+                                    {exportSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                                    {exportSaving ? 'Saving…' : 'Save Export IDs'}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

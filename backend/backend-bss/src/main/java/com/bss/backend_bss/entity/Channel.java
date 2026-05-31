@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
@@ -19,12 +20,17 @@ import java.util.Set;
 @Entity
 @Table(name = "channel")
 @Data
+// Identity is the id alone. Including the collections (exportIds/sources) in
+// equals/hashCode causes infinite recursion: ChannelExportId.hashCode()
+// references its channel, whose hashCode would re-walk the exportIds set.
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class Channel {
 
     @Id
+    @EqualsAndHashCode.Include
     @Column(name = "id", length = 255)
     private String id;
 

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     ChevronRight, ChevronLeft, Calendar, RefreshCw, ArrowLeft,
-    MonitorPlay, AlertCircle, Loader2, Sparkles, Eye, History
+    MonitorPlay, AlertCircle, Loader2, Sparkles, Eye, History, FileSpreadsheet
 } from 'lucide-react';
 import EditorLayout from '../components/EditorLayout';
 import { getChannelById } from '../api/channelApi';
@@ -218,6 +218,15 @@ export default function ViewChannel() {
                                 title="Run AI cleaning on this channel's schedule"
                             >
                                 <Sparkles className="w-4 h-4" /> Clean with AI
+                            </button>
+
+                            {/* Export this channel's schedule for the viewed date */}
+                            <button
+                                onClick={() => navigate(`/editor/export?channelId=${encodeURIComponent(id)}&date=${toIsoDate(selectedDate)}`)}
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg bg-white border border-[#94A973] text-[#4A533E] hover:bg-[#F4F5F0] transition-colors"
+                                title="Export this channel's schedule for this date to Excel"
+                            >
+                                <FileSpreadsheet className="w-4 h-4" /> Export to XLSX
                             </button>
 
                             {/* Date picker */}
