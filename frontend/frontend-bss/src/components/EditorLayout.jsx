@@ -12,6 +12,7 @@ import useAuth from '../hooks/useAuth.js';
  * Props:
  *   activeItem  — one of: 'dashboard' | 'channels' | 'programs' | 'sources'
  *                 | 'reschedule-logs' | 'drafts' | 'export-xlsx' | 'import-xlsx'
+ *                 | 'account'
  *   breadcrumb  — JSX rendered in the header breadcrumb area
  *   headerRight — optional extra JSX to render before the user chip in the header
  *   children    — page body
@@ -100,6 +101,44 @@ export default function EditorLayout({ activeItem, breadcrumb, headerRight, chil
                         )}
                     </div>
                 </div>
+
+                {/* Footer: account + settings + logout */}
+                <div className="border-t border-[#D4D3BE] p-3 space-y-1 shrink-0">
+                    <button
+                        onClick={() => navigate('/editor/account')}
+                        className={`w-full flex items-center gap-3 p-2.5 rounded-lg text-left transition-colors ${
+                            activeItem === 'account' ? 'bg-[#C3CEAA]/40' : 'hover:bg-[#C3CEAA]/30'
+                        }`}
+                    >
+                        <div className="w-9 h-9 rounded-full bg-[#C3CEAA]/50 border border-[#94A973]/40 flex items-center justify-center shrink-0">
+                            <User className="w-5 h-5 text-[#4A533E]" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-sm font-semibold text-[#2C3325] truncate">
+                                {user?.displayName || user?.username || 'User'}
+                            </p>
+                            <p className="text-xs text-[#6C755E] truncate">{user?.role || 'Account'}</p>
+                        </div>
+                    </button>
+
+                    <button
+                        onClick={() => navigate('/editor/account')}
+                        className={`w-full flex items-center gap-3 p-2.5 rounded-lg text-sm font-medium transition-colors ${
+                            activeItem === 'account'
+                                ? 'text-[#2C3325] bg-[#C3CEAA]/40'
+                                : 'text-[#4A533E] hover:bg-[#C3CEAA]/30'
+                        }`}
+                    >
+                        <Settings className="w-5 h-5" /> Account Settings
+                    </button>
+
+                    <button
+                        onClick={logout}
+                        className="w-full flex items-center gap-3 p-2.5 rounded-lg text-sm font-medium text-[#B23B3B] hover:bg-red-50 transition-colors"
+                    >
+                        <LogOut className="w-5 h-5" /> Logout
+                    </button>
+                </div>
             </div>
 
             {/* MAIN COLUMN */}
@@ -119,22 +158,11 @@ export default function EditorLayout({ activeItem, breadcrumb, headerRight, chil
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
-                        {headerRight}
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-[#F4F5F0] rounded-full border border-[#E4E3CE]">
-                            <User className="w-4 h-4 text-[#6C755E]" />
-                            <span className="text-sm font-semibold text-[#4A533E] max-w-[120px] truncate">
-                                {user?.displayName || user?.username || 'User'}
-                            </span>
+                    {headerRight && (
+                        <div className="flex items-center gap-3">
+                            {headerRight}
                         </div>
-                        <button
-                            onClick={logout}
-                            title="Sign out"
-                            className="p-2 rounded-md text-[#6C755E] hover:bg-red-50 hover:text-[#D54A4A] transition-colors"
-                        >
-                            <LogOut className="w-5 h-5" />
-                        </button>
-                    </div>
+                    )}
                 </header>
 
                 {/* Page body slot */}

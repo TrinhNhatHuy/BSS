@@ -12,6 +12,7 @@ import ProgramDetails  from './pages/ProgramDetails.jsx';
 import ManageSources   from './pages/ManageSource.jsx';
 import RescheduleLogs  from './pages/RescheduleLogs.jsx';
 import ExportXLSX      from './pages/ExportXLSX.jsx';
+import AccountSettings from './pages/AccountSettings.jsx';
 import Unauthorized    from './pages/Unauthorized';
 
 // Placeholders — replace with real pages when you build them
@@ -61,6 +62,7 @@ function App() {
                         <Route path="/editor/sources"        element={<ManageSources />} />
                         <Route path="/editor/reschedule-logs" element={<RescheduleLogs />} />
                         <Route path="/editor/export"          element={<ExportXLSX />} />
+                        <Route path="/editor/account"         element={<AccountSettings />} />
                     </Route>
 
                     {/* ADMIN-only routes*/}

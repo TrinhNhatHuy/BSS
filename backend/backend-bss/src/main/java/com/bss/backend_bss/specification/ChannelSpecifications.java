@@ -34,9 +34,25 @@ public final class ChannelSpecifications {
     public static Specification<Channel> build(ChannelFilter f) {
         return Specification.where(idContains(f.getId()))
                 .and(nameContains(f.getName()))
+                .and(searchIdOrName(f.getSearch()))
                 .and(channelGroupEquals(f.getChannelGroupId()))
                 .and(hasExportId(f.getExportType(), f.getExportId()))
                 .and(hasSource(f.getSourceName(), f.getSourcePriority()));
+    }
+
+    /**
+     * Single-box search: matches the channel id OR the name (case-insensitive
+     * substring). Unlike {@link #idContains}/{@link #nameContains} — which the
+     * caller AND-combines — this ORs the two so one query box finds a channel by
+     * either field.
+     */
+    public static Specification<Channel> searchIdOrName(String q) {
+        if (!StringUtils.hasText(q)) return null;
+        String pattern = "%" + q.toLowerCase() + "%";
+        return (root, query, cb) -> cb.or(
+                cb.like(cb.lower(root.get("id")), pattern),
+                cb.like(cb.lower(root.get("name")), pattern)
+        );
     }
 
     public static Specification<Channel> idContains(String id) {

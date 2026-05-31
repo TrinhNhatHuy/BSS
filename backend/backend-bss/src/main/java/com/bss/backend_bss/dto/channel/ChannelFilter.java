@@ -18,6 +18,15 @@ public class ChannelFilter {
 
     private String id;
     private String name;
+
+    /**
+     * Single-box search that matches the channel id OR the name (case-insensitive
+     * substring). Backs the search input on the Manage > Channels page. Kept
+     * separate from {@link #id}/{@link #name}, which AND-combine for precise
+     * column filtering.
+     */
+    private String search;
+
     private Long channelGroupId;
 
     private ChannelExportId.ExportType exportType;

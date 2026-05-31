@@ -101,12 +101,27 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
 
+    /**
+     * Merge fields into the current user and persist to the cache. Used after the
+     * Account Settings page saves a profile change so the sidebar (and anything
+     * reading `user`) updates without a full reload.
+     */
+    const updateUser = useCallback((partial) => {
+        setUser(prev => {
+            const next = { ...(prev ?? {}), ...partial };
+            setCachedUser(next);
+            return next;
+        });
+    }, []);
+
+
     const value = {
         user,
         loading,
         login,
         register,
         logout,
+        updateUser,
         isAuthenticated: !!user,
     };
 

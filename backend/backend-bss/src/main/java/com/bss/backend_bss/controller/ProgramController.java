@@ -2,8 +2,10 @@ package com.bss.backend_bss.controller;
 
 import com.bss.backend_bss.dto.program.ProgramFilter;
 import com.bss.backend_bss.dto.program.ProgramResponse;
+import com.bss.backend_bss.dto.program.UpdateProgramRequest;
 import com.bss.backend_bss.entity.Program;
 import com.bss.backend_bss.service.ProgramService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -63,6 +65,22 @@ public class ProgramController {
     @GetMapping("/{id}")
     public ResponseEntity<ProgramResponse> getById(@PathVariable Long id) {
         return ResponseEntity.ok(programService.getById(id));
+    }
+
+    /** Edit a program (name, content, category, times) from the detail page. */
+    @PutMapping("/{id}")
+    public ResponseEntity<ProgramResponse> update(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateProgramRequest request
+    ) {
+        return ResponseEntity.ok(programService.update(id, request));
+    }
+
+    /** Permanently delete a program from the detail page. */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        programService.delete(id);
+        return ResponseEntity.noContent().build();
     }
 
     /** Category enum values, for the index-page filter dropdown. */

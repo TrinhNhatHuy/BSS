@@ -24,4 +24,16 @@ public interface RescheduleLogRepository
     @Query("SELECT COUNT(r) FROM RescheduleLog r WHERE r.channelId = :channelId " +
            "AND (r.beginTime LIKE CONCAT(:date, '%') OR r.originalBeginTime LIKE CONCAT(:date, '%'))")
     long countByChannelIdAndDate(@Param("channelId") String channelId, @Param("date") String yyyymmdd);
+
+    /**
+     * Reschedule-log entries whose program date falls within [from, to]
+     * (inclusive YYYYMMDDHHMMSS prefixes). A row matches if either its new
+     * begin_time (ADDED/MODIFIED) or its original begin_time (DELETED) lands in
+     * the window — aligning the dashboard's "Reschedules" figure to the same
+     * date window the chart uses.
+     */
+    @Query("SELECT COUNT(r) FROM RescheduleLog r WHERE " +
+           "(r.beginTime >= :from AND r.beginTime <= :to) OR " +
+           "(r.originalBeginTime >= :from AND r.originalBeginTime <= :to)")
+    long countInDateRange(@Param("from") String from, @Param("to") String to);
 }

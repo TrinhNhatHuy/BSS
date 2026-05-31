@@ -24,6 +24,17 @@ export const getProgramById = (id) =>
     axiosClient.get(`/api/editor/programs/${id}`).then(res => res.data);
 
 /**
+ * Edit a program. data = { name, content, category, beginTime, endTime }
+ * with the times as 14-char YYYYMMDDHHMMSS strings.
+ */
+export const updateProgram = (id, data) =>
+    axiosClient.put(`/api/editor/programs/${id}`, data).then(res => res.data);
+
+/** Permanently delete a program. */
+export const deleteProgram = (id) =>
+    axiosClient.delete(`/api/editor/programs/${id}`);
+
+/**
  * Live (non-draft) programs aired on a given date for a channel.
  * Used by the ViewChannel detail page.
  *

@@ -118,7 +118,7 @@ export default function ManageChannels() {
     const [searchQuery, setSearchQuery] = useState('');
     const [exportTypeFilter, setExportTypeFilter] = useState('');
     const [exportIdFilter, setExportIdFilter] = useState('');
-    const [debouncedFilters, setDebouncedFilters] = useState({ name: '', exportType: '', exportId: '' });
+    const [debouncedFilters, setDebouncedFilters] = useState({ search: '', exportType: '', exportId: '' });
 
     const [currentPage, setCurrentPage] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
@@ -150,7 +150,7 @@ export default function ManageChannels() {
     useEffect(() => {
         const t = setTimeout(() => {
             setDebouncedFilters({
-                name: searchQuery,
+                search: searchQuery,
                 exportType: exportTypeFilter,
                 exportId: exportIdFilter,
             });
@@ -323,7 +323,7 @@ export default function ManageChannels() {
                             <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                             <input
                                 type="text"
-                                placeholder="Search by name..."
+                                placeholder="Search by name or ID..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#94A973] focus:border-transparent outline-none transition-shadow shadow-sm"
@@ -373,9 +373,9 @@ export default function ManageChannels() {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-[#F4F5F0] border-b border-gray-200 text-sm font-bold text-[#6C755E] uppercase tracking-wide">
-                                    <th className="p-4">Channel</th>
+                                    <th className="p-4">Channel ID</th>
+                                    <th className="p-4">Channel Name</th>
                                     <th className="p-4 hidden md:table-cell">Group</th>
-                                    <th className="p-4 hidden lg:table-cell">Sources</th>
                                     <th className="p-4 hidden lg:table-cell">Export IDs</th>
                                     <th className="p-4">AI Status</th>
                                     <th className="p-4 hidden md:table-cell">Last Updated</th>
@@ -393,16 +393,13 @@ export default function ManageChannels() {
                                     channels.map(channel => (
                                         <tr key={channel.id} className="hover:bg-gray-50 transition-colors">
                                             <td className="p-4">
-                                                <p className="font-semibold text-[#2C3325]">{channel.name}</p>
-                                                <p className="text-xs text-gray-400 font-mono mt-0.5">{channel.id}</p>
+                                                <span className="font-mono text-sm text-[#2C3325]">{channel.id}</span>
+                                            </td>
+                                            <td className="p-4">
+                                                <span className="font-semibold text-[#2C3325]">{channel.name}</span>
                                             </td>
                                             <td className="p-4 text-[#4A533E] text-sm hidden md:table-cell">
                                                 {channel.channelGroupName ?? <span className="text-gray-300">—</span>}
-                                            </td>
-                                            <td className="p-4 text-sm text-gray-600 hidden lg:table-cell">
-                                                {channel.sources?.length > 0
-                                                    ? channel.sources.map(s => s.name).join(', ')
-                                                    : <span className="text-gray-300">—</span>}
                                             </td>
                                             <td className="p-4 text-sm hidden lg:table-cell">
                                                 <div className="flex items-start gap-2">
@@ -470,7 +467,7 @@ export default function ManageChannels() {
                                 ) : (
                                     <tr>
                                         <td colSpan="7" className="p-8 text-center text-gray-400">
-                                            {(debouncedFilters.name || debouncedFilters.exportType || debouncedFilters.exportId)
+                                            {(debouncedFilters.search || debouncedFilters.exportType || debouncedFilters.exportId)
                                                 ? 'No channels match the current filters.'
                                                 : 'No channels yet. Click "Add Channel" to create one.'}
                                         </td>

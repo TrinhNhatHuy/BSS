@@ -2,8 +2,10 @@ package com.bss.backend_bss.service;
 
 import com.bss.backend_bss.dto.program.ProgramFilter;
 import com.bss.backend_bss.dto.program.ProgramResponse;
+import com.bss.backend_bss.dto.program.UpdateProgramRequest;
 import com.bss.backend_bss.entity.Channel;
 import com.bss.backend_bss.entity.Program;
+import com.bss.backend_bss.exception.InvalidReferenceException;
 import com.bss.backend_bss.exception.ResourceNotFoundException;
 import com.bss.backend_bss.repository.ChannelRepository;
 import com.bss.backend_bss.repository.ProgramRepository;
@@ -72,6 +74,41 @@ public class ProgramService {
         Program program = programRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Program not found: " + id));
         return toResponse(program, lookupChannelNames(List.of(program)));
+    }
+
+    /**
+     * Edit a program's name, content, category, and times. Channel and
+     * live/draft status are not editable here. Backs the Edit action on the
+     * program detail page.
+     */
+    @Transactional
+    public ProgramResponse update(Long id, UpdateProgramRequest req) {
+        Program program = programRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Program not found: " + id));
+
+        // begin_time/end_time are chronologically-sortable fixed-width strings,
+        // so a lexical compare is a valid time compare.
+        if (req.getEndTime().compareTo(req.getBeginTime()) <= 0) {
+            throw new InvalidReferenceException("End time must be after begin time.");
+        }
+
+        program.setName(req.getName());
+        program.setContent(req.getContent());
+        program.setCategory(req.getCategory());
+        program.setBeginTime(req.getBeginTime());
+        program.setEndTime(req.getEndTime());
+
+        Program saved = programRepository.save(program);
+        return toResponse(saved, lookupChannelNames(List.of(saved)));
+    }
+
+    /** Permanently delete a program. Backs the Delete action on the detail page. */
+    @Transactional
+    public void delete(Long id) {
+        if (!programRepository.existsById(id)) {
+            throw new ResourceNotFoundException("Program not found: " + id);
+        }
+        programRepository.deleteById(id);
     }
 
     private Map<String, String> lookupChannelNames(List<Program> programs) {
