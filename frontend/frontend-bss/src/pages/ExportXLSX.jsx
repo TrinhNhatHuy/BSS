@@ -25,18 +25,16 @@ import axiosClient from '../api/axiosClient';
 const RECENTS_KEY = 'bss.recentExports';
 const MAX_RECENTS = 6;
 
+// Each selected channel is exported as its own file, so we cap how many a
+// single export can fan out to.
+const MAX_CHANNELS = 5;
+
 const DATA_TYPES = [
     {
         key: 'includePrograms',
         label: 'Published Schedule',
         hint: 'The live, approved programs (default).',
         default: true,
-    },
-    {
-        key: 'includeDrafts',
-        label: 'Draft Programs',
-        hint: 'Programs still pending AI / editor review.',
-        default: false,
     },
     {
         key: 'includeLogs',
@@ -121,14 +119,13 @@ export default function ExportXLSX() {
                 const list = (data?.content ?? data ?? []).map(c => ({
                     id: c.id,
                     name: c.name,
-                    exportIds: c.exportIds ?? [],
                 }));
                 setChannels(list);
-                // Pre-fill: select only the requested channel if it exists; else all.
+                // Pre-fill: select only the requested channel if it exists.
+                // Otherwise leave empty — the editor picks up to MAX_CHANNELS,
+                // since each channel is exported as a separate file.
                 if (prefillChannel && list.some(c => c.id === prefillChannel)) {
                     setSelectedChannels([prefillChannel]);
-                } else {
-                    setSelectedChannels(list.map(c => c.id));
                 }
             } catch {
                 if (active) setChannelsError('Could not load channels. Please try again.');
@@ -140,7 +137,7 @@ export default function ExportXLSX() {
     }, [prefillChannel]);
 
     // --- Derived ---
-    const allSelected = channels.length > 0 && selectedChannels.length === channels.length;
+    const atMaxChannels = selectedChannels.length >= MAX_CHANNELS;
     const anyDataType = useMemo(
         () => Object.values(includeData).some(Boolean),
         [includeData]
@@ -149,14 +146,14 @@ export default function ExportXLSX() {
 
     // --- Handlers ---
     const toggleChannel = (id) => {
-        setSelectedChannels(prev =>
-            prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
-        );
+        setSelectedChannels(prev => {
+            if (prev.includes(id)) return prev.filter(c => c !== id);
+            if (prev.length >= MAX_CHANNELS) return prev; // cap reached — ignore
+            return [...prev, id];
+        });
     };
 
-    const toggleAllChannels = () => {
-        setSelectedChannels(allSelected ? [] : channels.map(c => c.id));
-    };
+    const clearChannels = () => setSelectedChannels([]);
 
     const toggleDataType = (key) => {
         setIncludeData(prev => ({ ...prev, [key]: !prev[key] }));
@@ -177,39 +174,44 @@ export default function ExportXLSX() {
         setIsExporting(true);
         setExportError(null);
 
-        // Build query params. channelIds is repeated (channelIds=A&channelIds=B)
-        // so Spring binds it to List<String>.
-        const params = new URLSearchParams();
-        selectedChannels.forEach(id => params.append('channelIds', id));
-        if (dateRange.start) params.append('dateFrom', dateRange.start);
-        if (dateRange.end) params.append('dateTo', dateRange.end);
-        DATA_TYPES.forEach(d => params.append(d.key, String(!!includeData[d.key])));
-
+        // One file per channel: request each selected channel separately and
+        // trigger its own download. Up to MAX_CHANNELS files.
+        const downloaded = [];
         try {
-            const response = await axiosClient.get(
-                `/api/editor/export/xlsx?${params.toString()}`,
-                { responseType: 'blob' }
-            );
+            for (const channelId of selectedChannels) {
+                const params = new URLSearchParams();
+                params.append('channelIds', channelId);
+                if (dateRange.start) params.append('dateFrom', dateRange.start);
+                if (dateRange.end) params.append('dateTo', dateRange.end);
+                DATA_TYPES.forEach(d => params.append(d.key, String(!!includeData[d.key])));
 
-            const filename = filenameFromDisposition(
-                response.headers['content-disposition'],
-                'BSS_Schedule.xlsx'
-            );
-            const blob = response.data;
+                const response = await axiosClient.get(
+                    `/api/editor/export/xlsx?${params.toString()}`,
+                    { responseType: 'blob' }
+                );
 
-            // Trigger the browser download.
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
+                const filename = filenameFromDisposition(
+                    response.headers['content-disposition'],
+                    `BSS_Schedule_${channelId}.xlsx`
+                );
+                const blob = response.data;
 
-            const entry = { filename, size: humanSize(blob.size), date: nowLabel() };
-            setLastExport(entry);
-            recordRecent(entry);
+                // Trigger the browser download.
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+
+                const entry = { filename, size: humanSize(blob.size), date: nowLabel() };
+                downloaded.push(entry);
+                recordRecent(entry);
+            }
+
+            setLastExport({ files: downloaded });
             setShowSuccessModal(true);
         } catch (err) {
             // Blob error bodies need decoding to read the message.
@@ -221,6 +223,9 @@ export default function ExportXLSX() {
                     message = parsed.message || message;
                 }
             } catch { /* keep default */ }
+            if (downloaded.length > 0) {
+                message = `${message} (${downloaded.length} file(s) downloaded before the error.)`;
+            }
             setExportError(message);
         } finally {
             setIsExporting(false);
@@ -244,7 +249,7 @@ export default function ExportXLSX() {
                         <FileSpreadsheet className="w-6 h-6 text-[#94A973]" />
                         Export Schedule Data
                     </h1>
-                    <p className="text-sm text-[#6C755E] mt-1">Generate Excel reports of broadcast schedules, draft programs, and reschedule logs.</p>
+                    <p className="text-sm text-[#6C755E] mt-1">Generate Excel reports of broadcast schedules and reschedule logs. Pick up to {MAX_CHANNELS} channels — each is downloaded as its own file.</p>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -293,16 +298,16 @@ export default function ExportXLSX() {
                                             Select Channels
                                             {!channelsLoading && (
                                                 <span className="ml-2 normal-case font-normal text-gray-400">
-                                                    {selectedChannels.length} / {channels.length}
+                                                    {selectedChannels.length} / {MAX_CHANNELS} max
                                                 </span>
                                             )}
                                         </h4>
-                                        {channels.length > 0 && (
+                                        {selectedChannels.length > 0 && (
                                             <button
-                                                type="button" onClick={toggleAllChannels}
+                                                type="button" onClick={clearChannels}
                                                 className="text-xs font-semibold text-[#94A973] hover:text-[#4A533E] transition-colors"
                                             >
-                                                {allSelected ? 'Deselect All' : 'Select All'}
+                                                Clear
                                             </button>
                                         )}
                                     </div>
@@ -321,34 +326,28 @@ export default function ExportXLSX() {
                                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-64 overflow-y-auto pr-1">
                                             {channels.map(channel => {
                                                 const checked = selectedChannels.includes(channel.id);
+                                                const disabled = !checked && atMaxChannels;
                                                 return (
-                                                    <label key={channel.id} title={channel.id}
-                                                        className={`flex items-start gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${checked ? 'border-[#94A973] bg-[#F4F5F0]' : 'border-gray-200 hover:bg-gray-50'}`}>
+                                                    <label key={channel.id} title={disabled ? `Up to ${MAX_CHANNELS} channels` : channel.id}
+                                                        className={`flex items-start gap-2 p-3 rounded-lg border transition-colors ${checked ? 'border-[#94A973] bg-[#F4F5F0] cursor-pointer' : disabled ? 'border-gray-200 opacity-50 cursor-not-allowed' : 'border-gray-200 hover:bg-gray-50 cursor-pointer'}`}>
                                                         <input
                                                             type="checkbox"
                                                             checked={checked}
+                                                            disabled={disabled}
                                                             onChange={() => toggleChannel(channel.id)}
-                                                            className="w-4 h-4 mt-0.5 text-[#94A973] border-gray-300 rounded focus:ring-[#94A973] accent-[#94A973]"
+                                                            className="w-4 h-4 mt-0.5 text-[#94A973] border-gray-300 rounded focus:ring-[#94A973] accent-[#94A973] disabled:cursor-not-allowed"
                                                         />
                                                         <span className="min-w-0">
                                                             <span className="block text-sm font-medium text-[#2C3325] truncate">{channel.name || channel.id}</span>
-                                                            {channel.exportIds?.length > 0 && (
-                                                                <span className="mt-1 flex flex-wrap gap-1">
-                                                                    {channel.exportIds.map(ex => (
-                                                                        <span key={ex.type}
-                                                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-white border border-[#E4E3CE] rounded text-[10px]">
-                                                                            <span className="font-bold text-[#4A533E]">{ex.type}</span>
-                                                                            <span className="font-mono text-gray-500">{ex.externalId}</span>
-                                                                        </span>
-                                                                    ))}
-                                                                </span>
-                                                            )}
                                                         </span>
                                                     </label>
                                                 );
                                             })}
                                         </div>
                                     )}
+                                    <p className="text-xs text-gray-400 mt-2">
+                                        Up to {MAX_CHANNELS} channels — each channel is exported as a separate file.
+                                    </p>
                                 </div>
 
                                 {/* Data Types */}
@@ -451,17 +450,23 @@ export default function ExportXLSX() {
                             </div>
                             <h3 className="text-xl font-bold text-[#2C3325] mb-2">Export Complete!</h3>
                             <p className="text-sm text-[#6C755E] mb-6">
-                                Your schedule data has been downloaded as an Excel spreadsheet.
+                                {lastExport?.files?.length === 1
+                                    ? 'Your schedule data has been downloaded as an Excel spreadsheet.'
+                                    : `${lastExport?.files?.length} files have been downloaded — one per channel.`}
                             </p>
 
-                            <div className="bg-[#FAFAFA] p-3 rounded-lg border border-gray-100 mb-6 flex items-center gap-3 text-left">
-                                <FileSpreadsheet className="w-5 h-5 text-[#94A973] shrink-0" />
-                                <div className="min-w-0">
-                                    <p className="text-sm font-bold text-[#2C3325] truncate" title={lastExport?.filename}>
-                                        {lastExport?.filename}
-                                    </p>
-                                    <p className="text-xs text-gray-500">Just now • {lastExport?.size}</p>
-                                </div>
+                            <div className="space-y-2 mb-6 max-h-48 overflow-y-auto">
+                                {lastExport?.files?.map((file, i) => (
+                                    <div key={i} className="bg-[#FAFAFA] p-3 rounded-lg border border-gray-100 flex items-center gap-3 text-left">
+                                        <FileSpreadsheet className="w-5 h-5 text-[#94A973] shrink-0" />
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-bold text-[#2C3325] truncate" title={file.filename}>
+                                                {file.filename}
+                                            </p>
+                                            <p className="text-xs text-gray-500">Just now • {file.size}</p>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
 
                             <button

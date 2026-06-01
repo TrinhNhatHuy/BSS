@@ -33,12 +33,6 @@ public class ExportRequest {
     private Boolean includePrograms;
 
     /**
-     * Also include draft programs (draft_batch_id IS NOT NULL) — the pending
-     * AI / editor review rows. Defaults to false.
-     */
-    private Boolean includeDrafts;
-
-    /**
      * Add a second sheet with the reschedule activity log for the selected
      * channels. Defaults to false.
      */
@@ -48,10 +42,6 @@ public class ExportRequest {
 
     public boolean wantsPrograms() {
         return includePrograms == null || includePrograms;
-    }
-
-    public boolean wantsDrafts() {
-        return Boolean.TRUE.equals(includeDrafts);
     }
 
     public boolean wantsLogs() {

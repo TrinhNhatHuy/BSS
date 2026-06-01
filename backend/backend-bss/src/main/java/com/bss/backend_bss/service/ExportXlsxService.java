@@ -2,10 +2,8 @@ package com.bss.backend_bss.service;
 
 import com.bss.backend_bss.dto.export.ExportRequest;
 import com.bss.backend_bss.entity.Channel;
-import com.bss.backend_bss.entity.ChannelExportId;
 import com.bss.backend_bss.entity.Program;
 import com.bss.backend_bss.entity.RescheduleLog;
-import com.bss.backend_bss.repository.ChannelExportIdRepository;
 import com.bss.backend_bss.repository.ChannelRepository;
 import com.bss.backend_bss.repository.ProgramRepository;
 import com.bss.backend_bss.repository.RescheduleLogRepository;
@@ -23,7 +21,6 @@ import org.springframework.util.StringUtils;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -34,16 +31,15 @@ import java.util.stream.Collectors;
  * Builds the .xlsx workbook for the editor "Tools &gt; Export XLSX" page.
  *
  * What gets written is driven by an {@link ExportRequest}:
- *   • a "Schedule" sheet with the live (and optionally draft) program rows for
- *     the selected channels in the selected date range, and
+ *   • a "Schedule" sheet with the published program rows for the selected
+ *     channels in the selected date range, and
  *   • an optional "Reschedule Logs" sheet with the change history.
  *
  * Channel names are bulk-resolved in one query (not per row), the same pattern
  * {@link ProgramService} / {@link RescheduleLogService} use.
  *
- * begin_time / end_time are stored as 14-char YYYYMMDDHHMMSS strings; we split
- * them into readable Date / Start / End columns here rather than dumping the raw
- * code, so the spreadsheet is usable as-is.
+ * begin_time / end_time are stored as 14-char YYYYMMDDHHMMSS strings; the
+ * Schedule sheet writes them verbatim as Start Time / End Time columns.
  */
 @Service
 @RequiredArgsConstructor
@@ -52,7 +48,6 @@ public class ExportXlsxService {
     private final ProgramRepository programRepository;
     private final RescheduleLogRepository rescheduleLogRepository;
     private final ChannelRepository channelRepository;
-    private final ChannelExportIdRepository channelExportIdRepository;
 
     /** Generate the workbook as a byte array ready to stream to the browser. */
     @Transactional(readOnly = true)
@@ -62,7 +57,7 @@ public class ExportXlsxService {
         try (SXSSFWorkbook workbook = new SXSSFWorkbook(SXSSFWorkbook.DEFAULT_WINDOW_SIZE)) {
             CellStyle headerStyle = headerStyle(workbook);
 
-            if (req.wantsPrograms() || req.wantsDrafts()) {
+            if (req.wantsPrograms()) {
                 writeScheduleSheet(workbook, headerStyle, channelIds, req);
             }
             if (req.wantsLogs()) {
@@ -112,11 +107,12 @@ public class ExportXlsxService {
 
     private void writeScheduleSheet(SXSSFWorkbook wb, CellStyle headerStyle,
                                     List<String> channelIds, ExportRequest req) {
+        // Published programs only (draft_batch_id IS NULL) — drafts are not exported.
         Specification<Program> spec = Specification
                 .where(programChannelIn(channelIds))
                 .and(ProgramSpecifications.beginTimeFrom(req.getDateFrom()))
                 .and(ProgramSpecifications.beginTimeTo(req.getDateTo()))
-                .and(draftFilter(req));
+                .and((root, q, cb) -> cb.isNull(root.get("draftBatchId")));
 
         List<Program> programs = programRepository.findAll(
                 spec, Sort.by("channelId").ascending().and(Sort.by("beginTime").ascending()));
@@ -124,14 +120,13 @@ public class ExportXlsxService {
         Set<String> chIds = programs.stream()
                 .map(Program::getChannelId).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<String, String> names = channelNames(chIds);
-        Map<String, String> exportIds = channelExportIds(chIds);
 
         SXSSFSheet sheet = wb.createSheet("Schedule");
         sheet.createFreezePane(0, 1); // keep the header visible while scrolling
 
         String[] headers = {
-                "Channel ID", "Channel", "Export IDs", "Date", "Start", "End",
-                "Program", "Content", "Category", "Type"
+                "Channel ID", "Channel", "Start Time", "End Time",
+                "Main Title", "Program", "Content", "Category"
         };
         writeRow(sheet, 0, headerStyle, headers);
 
@@ -140,30 +135,27 @@ public class ExportXlsxService {
             writeRow(sheet, r++, null,
                     p.getChannelId(),
                     p.getChannelId() == null ? "" : names.getOrDefault(p.getChannelId(), ""),
-                    p.getChannelId() == null ? "" : exportIds.getOrDefault(p.getChannelId(), ""),
-                    fmtDate(p.getBeginTime()),
-                    fmtTime(p.getBeginTime()),
-                    fmtTime(p.getEndTime()),
+                    p.getBeginTime() == null ? "" : p.getBeginTime(),
+                    p.getEndTime() == null ? "" : p.getEndTime(),
+                    mainTitle(p.getName(), p.getContent()),
                     p.getName(),
                     p.getContent(),
-                    p.getCategory() == null ? "" : p.getCategory().name(),
-                    p.getDraftBatchId() == null ? "Published" : "Draft");
+                    p.getCategory() == null ? "" : p.getCategory().name());
         }
-        setWidths(sheet, headers.length, new int[]{14, 22, 20, 12, 8, 8, 40, 40, 12, 11});
+        setWidths(sheet, headers.length, new int[]{14, 22, 16, 16, 50, 40, 40, 12});
     }
 
     /**
-     * draft_batch_id filter from the include flags:
-     *   programs only            → IS NULL
-     *   drafts only              → IS NOT NULL
-     *   both                     → no filter
+     * "Main Title" = program name and content joined as "name: content"
+     * (e.g. "Phim truyện Hàn Quốc: Trường Ca Hành - Tập 49"). Falls back to
+     * whichever part is present when the other is blank.
      */
-    private Specification<Program> draftFilter(ExportRequest req) {
-        boolean live = req.wantsPrograms();
-        boolean draft = req.wantsDrafts();
-        if (live && !draft) return (root, q, cb) -> cb.isNull(root.get("draftBatchId"));
-        if (!live && draft) return (root, q, cb) -> cb.isNotNull(root.get("draftBatchId"));
-        return null; // both → everything
+    private static String mainTitle(String name, String content) {
+        boolean hasName = StringUtils.hasText(name);
+        boolean hasContent = StringUtils.hasText(content);
+        if (hasName && hasContent) return name + ": " + content;
+        if (hasName) return name;
+        return content == null ? "" : content;
     }
 
     private Specification<Program> programChannelIn(List<String> ids) {
@@ -257,26 +249,6 @@ public class ExportXlsxService {
         if (ids.isEmpty()) return Map.of();
         return channelRepository.findAllById(ids).stream()
                 .collect(Collectors.toMap(Channel::getId, Channel::getName));
-    }
-
-    /**
-     * Per-channel export IDs formatted as "HD:123 | SD:456" (sorted by type).
-     * Bulk-loaded in one query and grouped by channel id, so the schedule sheet
-     * can carry each channel's external broadcast IDs without an N+1.
-     */
-    private Map<String, String> channelExportIds(Set<String> ids) {
-        if (ids.isEmpty()) return Map.of();
-        return channelExportIdRepository.findByChannelIds(ids).stream()
-                .collect(Collectors.groupingBy(
-                        e -> e.getChannel().getId(),
-                        Collectors.collectingAndThen(
-                                Collectors.toList(),
-                                list -> list.stream()
-                                        .sorted(Comparator.comparing(ChannelExportId::getType))
-                                        .map(e -> e.getType() + ":" + e.getExternalId())
-                                        .collect(Collectors.joining(" | "))
-                        )
-                ));
     }
 
     private CellStyle headerStyle(Workbook wb) {
