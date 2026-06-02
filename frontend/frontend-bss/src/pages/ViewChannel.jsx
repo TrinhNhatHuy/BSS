@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     ChevronRight, ChevronLeft, Calendar, RefreshCw, ArrowLeft,
-    MonitorPlay, AlertCircle, Loader2, Sparkles, Eye, History, FileSpreadsheet
+    MonitorPlay, AlertCircle, Loader2, Sparkles, Eye, History, FileSpreadsheet,
+    Edit2, Trash2, Save, X
 } from 'lucide-react';
 import EditorLayout from '../components/EditorLayout';
-import { getChannelById } from '../api/channelApi';
+import { getChannelById, getChannelGroups, updateChannel, renameChannel, deleteChannel } from '../api/channelApi';
 import { getProgramsForChannel } from '../api/programApi';
+import { getRescheduleLogs } from '../api/rescheduleLogApi';
 
 /** YYYYMMDDHHMMSS → "YYYY-MM-DD HH:MM:SS" ('' if missing/invalid) */
 function formatFull(s) {
@@ -40,6 +42,35 @@ function categoryColor(category) {
     }
 }
 
+/** ISO LocalDateTime ("2026-05-24T14:30:22") → "2026-05-24 14:30:22" ('—' if null) */
+function formatLogTime(iso) {
+    if (!iso) return '—';
+    return iso.replace('T', ' ').slice(0, 19);
+}
+
+function logStatusStyle(status) {
+    switch (status) {
+        case 'ADDED':    return 'bg-sky-100 text-sky-700 border-sky-200';
+        case 'MODIFIED': return 'bg-amber-100 text-amber-700 border-amber-200';
+        case 'DELETED':  return 'bg-rose-100 text-rose-700 border-rose-200';
+        default:         return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
+}
+
+/** One-line summary of which fields a reschedule log changed. */
+function logChangeSummary(log) {
+    if (log.status === 'ADDED')   return 'New program entry added';
+    if (log.status === 'DELETED') return 'Program removed from schedule';
+    const fields = [
+        { label: 'Start Time', oldVal: log.originalBeginTime, newVal: log.beginTime },
+        { label: 'End Time',   oldVal: log.originalEndTime,   newVal: log.endTime },
+        { label: 'Name',       oldVal: log.originalName,      newVal: log.name },
+        { label: 'Content',    oldVal: log.originalContent,   newVal: log.content },
+    ];
+    const changed = fields.filter(f => (f.oldVal ?? '') !== (f.newVal ?? '')).map(f => f.label);
+    return changed.length ? changed.join(', ') + ' updated' : '—';
+}
+
 /** A single label/value row inside the Channel Details card. */
 function DetailItem({ label, children }) {
     return (
@@ -69,6 +100,24 @@ export default function ViewChannel() {
     const [refreshKey, setRefreshKey] = useState(0);
     const [aiNotice, setAiNotice] = useState(false);
 
+    // Channel groups for the Modify picker
+    const [channelGroups, setChannelGroups] = useState([]);
+
+    // Modify modal
+    const [editOpen, setEditOpen] = useState(false);
+    const [editForm, setEditForm] = useState({ id: '', name: '', channelGroupId: '' });
+    const [editSaving, setEditSaving] = useState(false);
+    const [editError, setEditError] = useState(null);
+
+    // Reschedule logs modal
+    const [logsOpen, setLogsOpen] = useState(false);
+    const [logsState, setLogsState] = useState({ data: [], loading: false, error: null });
+
+    // Delete confirmation modal
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+    const [deleteError, setDeleteError] = useState(null);
+
     // Load channel detail
     useEffect(() => {
         let cancelled = false;
@@ -82,6 +131,11 @@ export default function ViewChannel() {
             });
         return () => { cancelled = true; };
     }, [id, refreshKey]);
+
+    // Load channel groups once for the Modify picker
+    useEffect(() => {
+        getChannelGroups().then(setChannelGroups).catch(() => setChannelGroups([]));
+    }, []);
 
     // Load programs for the selected date
     useEffect(() => {
@@ -111,6 +165,78 @@ export default function ViewChannel() {
     };
 
     const isToday = toIsoDate(selectedDate) === toIsoDate(new Date());
+
+    // --- Modify channel (id / name / group) ---
+    const openEdit = () => {
+        if (!channel) return;
+        setEditError(null);
+        setEditForm({
+            id: channel.id,
+            name: channel.name,
+            channelGroupId: channel.channelGroupId != null ? String(channel.channelGroupId) : '',
+        });
+        setEditOpen(true);
+    };
+
+    const handleEditSave = async (e) => {
+        e.preventDefault();
+        setEditSaving(true);
+        setEditError(null);
+
+        const newId = editForm.id.trim();
+        const groupId = editForm.channelGroupId === '' ? null : Number(editForm.channelGroupId);
+
+        try {
+            // PUT replaces the whole channel, so preserve sources/exportIds and
+            // only change name + group here.
+            await updateChannel(channel.id, {
+                name: editForm.name.trim(),
+                channelGroupId: groupId,
+                sources: channel.sources?.map(s => s.name) ?? [],
+                exportIds: channel.exportIds?.map(ex => ({ type: ex.type, externalId: ex.externalId })) ?? [],
+            });
+
+            if (newId !== channel.id) {
+                // Rename the primary key; child rows cascade server-side.
+                await renameChannel(channel.id, newId);
+                setEditOpen(false);
+                // The URL still holds the old id — move to the new one so the page reloads.
+                navigate(`/editor/channels/${encodeURIComponent(newId)}`, { replace: true });
+            } else {
+                setEditOpen(false);
+                setRefreshKey(k => k + 1);
+            }
+        } catch (err) {
+            setEditError(err.response?.data?.message || 'Failed to save changes.');
+        } finally {
+            setEditSaving(false);
+        }
+    };
+
+    // --- View reschedule logs for this channel ---
+    const openLogs = () => {
+        setLogsOpen(true);
+        setLogsState({ data: [], loading: true, error: null });
+        getRescheduleLogs({ channelId: id }, 0, 200)
+            .then(res => setLogsState({ data: res.content ?? [], loading: false, error: null }))
+            .catch(err => setLogsState({
+                data: [], loading: false,
+                error: err.response?.data?.message || 'Failed to load reschedule logs.',
+            }));
+    };
+
+    // --- Delete channel ---
+    const handleDelete = async () => {
+        setDeleting(true);
+        setDeleteError(null);
+        try {
+            await deleteChannel(channel.id);
+            navigate('/editor/channels');
+        } catch (err) {
+            setDeleteError(err.response?.data?.message || 'Failed to delete channel.');
+            setDeleting(false);
+        }
+    };
 
     const breadcrumb = (
         <>
@@ -145,6 +271,33 @@ export default function ViewChannel() {
                     <div className="flex items-center gap-2 p-4 bg-rose-50 border border-rose-200 rounded-lg text-rose-700">
                         <AlertCircle className="w-5 h-5 shrink-0" />
                         <span className="text-sm">{channelError}</span>
+                    </div>
+                )}
+
+                {/* Channel-level actions: modify, view logs, delete */}
+                {channel && (
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            onClick={openEdit}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg bg-white border border-[#94A973] text-[#4A533E] hover:bg-[#F4F5F0] transition-colors shadow-sm"
+                            title="Edit channel ID, name and group"
+                        >
+                            <Edit2 className="w-4 h-4" /> Modify
+                        </button>
+                        <button
+                            onClick={openLogs}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg bg-white border border-gray-200 text-[#4A533E] hover:bg-gray-50 transition-colors shadow-sm"
+                            title="View this channel's reschedule logs"
+                        >
+                            <History className="w-4 h-4" /> View Reschedule Logs
+                        </button>
+                        <button
+                            onClick={() => { setDeleteError(null); setDeleteOpen(true); }}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors shadow-sm"
+                            title="Delete this channel"
+                        >
+                            <Trash2 className="w-4 h-4" /> Delete
+                        </button>
                     </div>
                 )}
 
@@ -346,6 +499,226 @@ export default function ViewChannel() {
                     </div>
                 </div>
             </div>
+
+            {/* ============================================================ */}
+            {/* MODIFY CHANNEL MODAL                                         */}
+            {/* ============================================================ */}
+            {editOpen && (
+                <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col">
+                        <div className="flex justify-between items-center p-5 border-b border-gray-100 shrink-0">
+                            <h3 className="text-xl font-bold text-[#2C3325]">Modify Channel</h3>
+                            <button onClick={() => setEditOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleEditSave} className="p-5 space-y-4 overflow-y-auto">
+                            {editError && (
+                                <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
+                                    <AlertCircle className="w-4 h-4 shrink-0" /> {editError}
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="block text-sm font-bold text-[#6C755E] mb-1">
+                                    Channel ID <span className="text-rose-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={editForm.id}
+                                    onChange={(e) => setEditForm({ ...editForm, id: e.target.value.toUpperCase() })}
+                                    pattern="^[A-Z0-9_]+$"
+                                    title="Uppercase letters, digits, and underscores only"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#94A973] font-mono"
+                                />
+                                <p className="text-xs text-gray-400 mt-1">
+                                    Changing the ID re-links every program, reschedule log and export tied to this channel.
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-bold text-[#6C755E] mb-1">
+                                    Channel Name <span className="text-rose-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    maxLength={50}
+                                    value={editForm.name}
+                                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#94A973]"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-bold text-[#6C755E] mb-1">Channel Group</label>
+                                <select
+                                    value={editForm.channelGroupId}
+                                    onChange={(e) => setEditForm({ ...editForm, channelGroupId: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#94A973] bg-white"
+                                >
+                                    <option value="">No group</option>
+                                    {channelGroups.map(g => (
+                                        <option key={g.id} value={String(g.id)}>{g.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="flex gap-3 pt-4 mt-2 border-t border-gray-100">
+                                <button
+                                    type="button"
+                                    onClick={() => setEditOpen(false)}
+                                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={editSaving}
+                                    className="flex-1 px-4 py-2 bg-[#94A973] text-white font-medium rounded-lg hover:bg-[#8A9F6B] transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                                >
+                                    {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                    {editSaving ? 'Saving…' : 'Save'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ============================================================ */}
+            {/* RESCHEDULE LOGS MODAL                                        */}
+            {/* ============================================================ */}
+            {logsOpen && (
+                <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl overflow-hidden max-h-[90vh] flex flex-col">
+                        <div className="flex justify-between items-center p-5 border-b border-gray-100 bg-[#FAFAFA] shrink-0">
+                            <div className="min-w-0">
+                                <h3 className="text-lg font-bold text-[#2C3325] flex items-center gap-2">
+                                    <History className="w-5 h-5 text-[#94A973]" /> Reschedule Logs
+                                </h3>
+                                <p className="text-xs text-gray-400 truncate mt-0.5">
+                                    {channel?.name} <span className="font-mono">({id})</span>
+                                    {!logsState.loading && !logsState.error &&
+                                        ` · ${logsState.data.length} log${logsState.data.length === 1 ? '' : 's'}`}
+                                </p>
+                            </div>
+                            <button onClick={() => setLogsOpen(false)} className="text-gray-400 hover:text-gray-600 shrink-0">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-auto">
+                            {logsState.error ? (
+                                <div className="m-4 flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
+                                    <AlertCircle className="w-4 h-4 shrink-0" /> {logsState.error}
+                                </div>
+                            ) : logsState.loading ? (
+                                <div className="p-12 text-center">
+                                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-[#94A973]" />
+                                </div>
+                            ) : logsState.data.length === 0 ? (
+                                <div className="p-12 text-center text-gray-400 text-sm">
+                                    No reschedule logs recorded for this channel.
+                                </div>
+                            ) : (
+                                <table className="w-full text-left border-collapse min-w-[700px]">
+                                    <thead>
+                                        <tr className="text-xs font-bold text-[#6C755E] uppercase tracking-wide">
+                                            <th className="p-3 w-48 bg-[#F4F5F0] border-b border-gray-200 sticky top-0">Timestamp</th>
+                                            <th className="p-3 bg-[#F4F5F0] border-b border-gray-200 sticky top-0">Program</th>
+                                            <th className="p-3 bg-[#F4F5F0] border-b border-gray-200 sticky top-0">What Changed</th>
+                                            <th className="p-3 w-28 text-center bg-[#F4F5F0] border-b border-gray-200 sticky top-0">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {logsState.data.map(log => (
+                                            <tr key={log.id} className="hover:bg-[#FAFAFA] transition-colors">
+                                                <td className="p-3 text-sm text-gray-600 font-medium whitespace-nowrap">
+                                                    {formatLogTime(log.createTime)}
+                                                </td>
+                                                <td className="p-3 font-semibold text-[#2C3325]">
+                                                    {log.name || log.originalName || '—'}
+                                                </td>
+                                                <td className="p-3 text-sm text-[#6C755E]">
+                                                    {logChangeSummary(log)}
+                                                </td>
+                                                <td className="p-3 text-center">
+                                                    <span className={`inline-flex px-2.5 py-1 text-xs font-bold rounded-md border ${logStatusStyle(log.status)}`}>
+                                                        {log.status}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+
+                        <div className="p-4 border-t border-gray-100 bg-[#FAFAFA] flex justify-end shrink-0">
+                            <button
+                                onClick={() => setLogsOpen(false)}
+                                className="px-6 py-2 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ============================================================ */}
+            {/* DELETE CONFIRMATION MODAL                                    */}
+            {/* ============================================================ */}
+            {deleteOpen && (
+                <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+                        <div className="p-6">
+                            <div className="flex items-start gap-3">
+                                <div className="p-2 bg-rose-50 rounded-full shrink-0">
+                                    <Trash2 className="w-5 h-5 text-rose-600" />
+                                </div>
+                                <div className="min-w-0">
+                                    <h3 className="text-lg font-bold text-[#2C3325]">Delete channel?</h3>
+                                    <p className="text-sm text-[#6C755E] mt-1">
+                                        This permanently deletes <span className="font-bold text-[#2C3325]">{channel?.name}</span>{' '}
+                                        <span className="font-mono">({id})</span> along with its export IDs and source links.
+                                        Its programs and reschedule logs are kept but unlinked. This cannot be undone.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {deleteError && (
+                                <div className="mt-4 flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
+                                    <AlertCircle className="w-4 h-4 shrink-0" /> {deleteError}
+                                </div>
+                            )}
+
+                            <div className="flex gap-3 pt-5">
+                                <button
+                                    type="button"
+                                    onClick={() => setDeleteOpen(false)}
+                                    disabled={deleting}
+                                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleDelete}
+                                    disabled={deleting}
+                                    className="flex-1 px-4 py-2 bg-rose-600 text-white font-medium rounded-lg hover:bg-rose-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                                >
+                                    {deleting && <Loader2 className="w-4 h-4 animate-spin" />}
+                                    {deleting ? 'Deleting…' : 'Delete'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </EditorLayout>
     );
 }

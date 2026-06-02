@@ -90,6 +90,20 @@ public class ChannelController {
     }
 
     /**
+     * PUT /api/editor/channels/{id}/rename
+     *
+     * Changes the channel's primary key. FKs cascade the new id to all child
+     * rows. Returns the channel under its new id.
+     */
+    @PutMapping("/{id}/rename")
+    public ResponseEntity<ChannelResponse> rename(
+            @PathVariable String id,
+            @Valid @RequestBody RenameChannelRequest request
+    ) {
+        return ResponseEntity.ok(channelService.rename(id, request.getNewId()));
+    }
+
+    /**
      * DELETE /api/editor/channels/{id}
      */
     @DeleteMapping("/{id}")

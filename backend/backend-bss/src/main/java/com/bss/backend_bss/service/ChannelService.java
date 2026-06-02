@@ -171,6 +171,39 @@ public class ChannelService {
     }
 
     // ============================================================
+    // RENAME (change primary key)
+    // ============================================================
+
+    /**
+     * Change a channel's ID (primary key). FKs are ON UPDATE CASCADE, so the
+     * native rename propagates to every child table (programs, reschedule logs,
+     * export IDs, channel_source, draft batches, crawl jobs).
+     *
+     * No-op if newId equals the current id. Rejects a collision with an
+     * existing channel.
+     */
+    @Transactional
+    public ChannelResponse rename(String oldId, String newId) {
+        String normalized = newId == null ? "" : newId.trim();
+
+        if (!channelRepository.existsById(oldId)) {
+            throw new ResourceNotFoundException("Channel not found: " + oldId);
+        }
+        if (normalized.equals(oldId)) {
+            return getById(oldId); // nothing to change
+        }
+        if (channelRepository.existsById(normalized)) {
+            throw new DuplicateResourceException(
+                    "Channel ID '" + normalized + "' already exists");
+        }
+
+        channelRepository.renameId(oldId, normalized);
+        log.info("Renamed channel '{}' -> '{}'", oldId, normalized);
+
+        return getById(normalized);
+    }
+
+    // ============================================================
     // DELETE
     // ============================================================
 

@@ -12,6 +12,10 @@ export const getChannels = (filter = {}, page = 0, size = 20) => {
 export const getExportTypes = () =>
     axiosClient.get('/api/editor/channels/export-types').then(res => res.data);
 
+/** Channel groups for the picker dropdown: [{ id, name }]. */
+export const getChannelGroups = () =>
+    axiosClient.get('/api/editor/channel-groups').then(res => res.data);
+
 export const getChannelById = (id) =>
     axiosClient.get(`/api/editor/channels/${id}`).then(res => res.data);
 
@@ -20,6 +24,10 @@ export const createChannel = (data) =>
 
 export const updateChannel = (id, data) =>
     axiosClient.put(`/api/editor/channels/${id}`, data).then(res => res.data);
+
+/** Rename a channel's primary key. Child rows cascade to the new id server-side. */
+export const renameChannel = (id, newId) =>
+    axiosClient.put(`/api/editor/channels/${id}/rename`, { newId }).then(res => res.data);
 
 export const deleteChannel = (id) =>
     axiosClient.delete(`/api/editor/channels/${id}`);
