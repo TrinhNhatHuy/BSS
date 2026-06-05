@@ -89,8 +89,13 @@ CREATE TABLE draft_batch (
                              channel_id    VARCHAR(255) NOT NULL,
                              created_by    BIGINT       NOT NULL,
                              status        VARCHAR(20)  NOT NULL DEFAULT 'PROCESSING'
-                                 CHECK (status IN ('PROCESSING', 'COMPLETED', 'APPROVED')),
-                             program_date  VARCHAR(8)   DEFAULT NULL,
+                                 CHECK (status IN
+
+
+
+
+                                        ('PROCESSING', 'COMPLETED', 'APPROVED')),
+                             program_date  VARCHAR(14)   DEFAULT NULL,
                              approved_time TIMESTAMP(6) DEFAULT NULL,
                              approved_by   BIGINT       DEFAULT NULL,
                              create_time   TIMESTAMP(6) DEFAULT NULL,

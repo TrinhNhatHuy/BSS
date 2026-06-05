@@ -1,0 +1,34 @@
+# Applies to docker builds whose context is the project root (the ml-service
+# image). The backend/frontend images use their own subdir contexts and are
+# unaffected. Keeps the ml-service build context to just ml-service/ + the model.
+.git
+.idea
+.claude
+.vscode
+
+# JS / build artifacts
+node_modules
+**/node_modules
+dist
+**/dist
+
+# Python envs / caches
+**/.venv
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+
+# Other services / heavy dirs not needed by ml-service
+backend
+frontend
+n8n-bss
+database
+
+# Large data, dumps, logs (model_v2_text_channel.pkl is intentionally NOT ignored)
+*.csv
+*.sql
+*.log
+backup_*.sql
+replay_pid*.log
+hs_err_pid*.log

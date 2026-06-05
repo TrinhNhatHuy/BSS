@@ -20,3 +20,7 @@ export const getRescheduleLogs = (filter = {}, page = 0, size = 20, sort) => {
 /** Status enum values, for the filter dropdown. */
 export const getRescheduleLogStatuses = () =>
     axiosClient.get('/api/editor/reschedule-logs/statuses').then(res => res.data);
+
+/** A single reschedule log by id, for the change-detail page. */
+export const getRescheduleLogById = (id) =>
+    axiosClient.get(`/api/editor/reschedule-logs/${id}`).then(res => res.data);

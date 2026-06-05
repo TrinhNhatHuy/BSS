@@ -8,7 +8,6 @@ import {
 import EditorLayout from '../components/EditorLayout';
 import { getChannelById, getChannelGroups, updateChannel, renameChannel, deleteChannel } from '../api/channelApi';
 import { getProgramsForChannel } from '../api/programApi';
-import { getRescheduleLogs } from '../api/rescheduleLogApi';
 
 /** YYYYMMDDHHMMSS → "YYYY-MM-DD HH:MM:SS" ('' if missing/invalid) */
 function formatFull(s) {
@@ -40,35 +39,6 @@ function categoryColor(category) {
         case 'SeriesFR': return 'bg-rose-50 text-rose-700 border-rose-200';
         default:         return 'bg-gray-50 text-gray-600 border-gray-200';
     }
-}
-
-/** ISO LocalDateTime ("2026-05-24T14:30:22") → "2026-05-24 14:30:22" ('—' if null) */
-function formatLogTime(iso) {
-    if (!iso) return '—';
-    return iso.replace('T', ' ').slice(0, 19);
-}
-
-function logStatusStyle(status) {
-    switch (status) {
-        case 'ADDED':    return 'bg-sky-100 text-sky-700 border-sky-200';
-        case 'MODIFIED': return 'bg-amber-100 text-amber-700 border-amber-200';
-        case 'DELETED':  return 'bg-rose-100 text-rose-700 border-rose-200';
-        default:         return 'bg-gray-100 text-gray-700 border-gray-200';
-    }
-}
-
-/** One-line summary of which fields a reschedule log changed. */
-function logChangeSummary(log) {
-    if (log.status === 'ADDED')   return 'New program entry added';
-    if (log.status === 'DELETED') return 'Program removed from schedule';
-    const fields = [
-        { label: 'Start Time', oldVal: log.originalBeginTime, newVal: log.beginTime },
-        { label: 'End Time',   oldVal: log.originalEndTime,   newVal: log.endTime },
-        { label: 'Name',       oldVal: log.originalName,      newVal: log.name },
-        { label: 'Content',    oldVal: log.originalContent,   newVal: log.content },
-    ];
-    const changed = fields.filter(f => (f.oldVal ?? '') !== (f.newVal ?? '')).map(f => f.label);
-    return changed.length ? changed.join(', ') + ' updated' : '—';
 }
 
 /** A single label/value row inside the Channel Details card. */
@@ -108,10 +78,6 @@ export default function ViewChannel() {
     const [editForm, setEditForm] = useState({ id: '', name: '', channelGroupId: '' });
     const [editSaving, setEditSaving] = useState(false);
     const [editError, setEditError] = useState(null);
-
-    // Reschedule logs modal
-    const [logsOpen, setLogsOpen] = useState(false);
-    const [logsState, setLogsState] = useState({ data: [], loading: false, error: null });
 
     // Delete confirmation modal
     const [deleteOpen, setDeleteOpen] = useState(false);
@@ -213,17 +179,8 @@ export default function ViewChannel() {
         }
     };
 
-    // --- View reschedule logs for this channel ---
-    const openLogs = () => {
-        setLogsOpen(true);
-        setLogsState({ data: [], loading: true, error: null });
-        getRescheduleLogs({ channelId: id }, 0, 200)
-            .then(res => setLogsState({ data: res.content ?? [], loading: false, error: null }))
-            .catch(err => setLogsState({
-                data: [], loading: false,
-                error: err.response?.data?.message || 'Failed to load reschedule logs.',
-            }));
-    };
+    // --- View reschedule logs for this channel (dedicated page) ---
+    const openLogs = () => navigate(`/editor/channels/${encodeURIComponent(id)}/reschedule-logs`);
 
     // --- Delete channel ---
     const handleDelete = async () => {
@@ -584,87 +541,6 @@ export default function ViewChannel() {
                                 </button>
                             </div>
                         </form>
-                    </div>
-                </div>
-            )}
-
-            {/* ============================================================ */}
-            {/* RESCHEDULE LOGS MODAL                                        */}
-            {/* ============================================================ */}
-            {logsOpen && (
-                <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl overflow-hidden max-h-[90vh] flex flex-col">
-                        <div className="flex justify-between items-center p-5 border-b border-gray-100 bg-[#FAFAFA] shrink-0">
-                            <div className="min-w-0">
-                                <h3 className="text-lg font-bold text-[#2C3325] flex items-center gap-2">
-                                    <History className="w-5 h-5 text-[#94A973]" /> Reschedule Logs
-                                </h3>
-                                <p className="text-xs text-gray-400 truncate mt-0.5">
-                                    {channel?.name} <span className="font-mono">({id})</span>
-                                    {!logsState.loading && !logsState.error &&
-                                        ` · ${logsState.data.length} log${logsState.data.length === 1 ? '' : 's'}`}
-                                </p>
-                            </div>
-                            <button onClick={() => setLogsOpen(false)} className="text-gray-400 hover:text-gray-600 shrink-0">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        <div className="flex-1 overflow-auto">
-                            {logsState.error ? (
-                                <div className="m-4 flex items-center gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
-                                    <AlertCircle className="w-4 h-4 shrink-0" /> {logsState.error}
-                                </div>
-                            ) : logsState.loading ? (
-                                <div className="p-12 text-center">
-                                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-[#94A973]" />
-                                </div>
-                            ) : logsState.data.length === 0 ? (
-                                <div className="p-12 text-center text-gray-400 text-sm">
-                                    No reschedule logs recorded for this channel.
-                                </div>
-                            ) : (
-                                <table className="w-full text-left border-collapse min-w-[700px]">
-                                    <thead>
-                                        <tr className="text-xs font-bold text-[#6C755E] uppercase tracking-wide">
-                                            <th className="p-3 w-48 bg-[#F4F5F0] border-b border-gray-200 sticky top-0">Timestamp</th>
-                                            <th className="p-3 bg-[#F4F5F0] border-b border-gray-200 sticky top-0">Program</th>
-                                            <th className="p-3 bg-[#F4F5F0] border-b border-gray-200 sticky top-0">What Changed</th>
-                                            <th className="p-3 w-28 text-center bg-[#F4F5F0] border-b border-gray-200 sticky top-0">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                        {logsState.data.map(log => (
-                                            <tr key={log.id} className="hover:bg-[#FAFAFA] transition-colors">
-                                                <td className="p-3 text-sm text-gray-600 font-medium whitespace-nowrap">
-                                                    {formatLogTime(log.createTime)}
-                                                </td>
-                                                <td className="p-3 font-semibold text-[#2C3325]">
-                                                    {log.name || log.originalName || '—'}
-                                                </td>
-                                                <td className="p-3 text-sm text-[#6C755E]">
-                                                    {logChangeSummary(log)}
-                                                </td>
-                                                <td className="p-3 text-center">
-                                                    <span className={`inline-flex px-2.5 py-1 text-xs font-bold rounded-md border ${logStatusStyle(log.status)}`}>
-                                                        {log.status}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            )}
-                        </div>
-
-                        <div className="p-4 border-t border-gray-100 bg-[#FAFAFA] flex justify-end shrink-0">
-                            <button
-                                onClick={() => setLogsOpen(false)}
-                                className="px-6 py-2 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors"
-                            >
-                                Close
-                            </button>
-                        </div>
                     </div>
                 </div>
             )}

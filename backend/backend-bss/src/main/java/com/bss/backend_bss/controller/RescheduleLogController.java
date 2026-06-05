@@ -20,6 +20,7 @@ import java.util.List;
  *
  *   GET /api/editor/reschedule-logs           → paginated, filterable index
  *   GET /api/editor/reschedule-logs/statuses  → enum values for the status dropdown
+ *   GET /api/editor/reschedule-logs/{id}      → a single log, for the detail page
  */
 @RestController
 @RequestMapping("/api/editor/reschedule-logs")
@@ -48,5 +49,15 @@ public class RescheduleLogController {
         return ResponseEntity.ok(
                 Arrays.stream(RescheduleLog.Status.values()).map(Enum::name).toList()
         );
+    }
+
+    /**
+     * A single reschedule log by id, for the change-detail page. Returns 404 if
+     * no such log exists. (Declared after /statuses so that literal path never
+     * binds to {id}.)
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<RescheduleLogResponse> getById(@PathVariable Long id) {
+        return ResponseEntity.ok(rescheduleLogService.getById(id));
     }
 }

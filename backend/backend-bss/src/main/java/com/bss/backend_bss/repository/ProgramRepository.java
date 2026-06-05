@@ -23,6 +23,14 @@ public interface ProgramRepository
             String channelId, String dateYyyymmdd);
 
     /**
+     * Live (non-draft) programs across ALL channels whose begin_time starts with
+     * the given YYYYMMDD prefix — the whole day's published schedule. Backs the
+     * USER home page (UserHomeService).
+     */
+    List<Program> findByDraftBatchIdIsNullAndBeginTimeStartingWithOrderByBeginTimeAscChannelIdAsc(
+            String dateYyyymmdd);
+
+    /**
      * Live (non-draft) program counts grouped by channel for programs whose
      * begin_time falls within [from, to] (inclusive YYYYMMDDHHMMSS prefixes).
      *

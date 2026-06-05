@@ -11,19 +11,18 @@ import ProgramIndex    from './pages/ProgramIndex.jsx';
 import ProgramDetails  from './pages/ProgramDetails.jsx';
 import ManageSources   from './pages/ManageSource.jsx';
 import RescheduleLogs  from './pages/RescheduleLogs.jsx';
+import ChannelRescheduleLogs from './pages/ChannelRescheduleLogs.jsx';
+import RescheduleLogDetail   from './pages/RescheduleLogDetail.jsx';
 import ExportXLSX      from './pages/ExportXLSX.jsx';
 import AccountSettings from './pages/AccountSettings.jsx';
+import UserHome        from './pages/UserHome.jsx';
+import UserOnboarding  from './pages/UserOnboarding.jsx';
 import Unauthorized    from './pages/Unauthorized';
 
 // Placeholders — replace with real pages when you build them
 const AdminDashboard = () => (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 font-sans">
         <p className="text-gray-400 text-lg">Admin Dashboard — coming soon</p>
-    </div>
-);
-const UserHome = () => (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 font-sans">
-        <p className="text-gray-400 text-lg">User Home — coming soon</p>
     </div>
 );
 
@@ -57,6 +56,8 @@ function App() {
                         <Route path="/editor/dashboard"      element={<EditorDashboard />} />
                         <Route path="/editor/channels"       element={<ManageChannels />} />
                         <Route path="/editor/channels/:id"   element={<ViewChannel />} />
+                        <Route path="/editor/channels/:id/reschedule-logs"         element={<ChannelRescheduleLogs />} />
+                        <Route path="/editor/channels/:id/reschedule-logs/:logId"  element={<RescheduleLogDetail />} />
                         <Route path="/editor/programs"       element={<ProgramIndex />} />
                         <Route path="/editor/programs/:id"   element={<ProgramDetails />} />
                         <Route path="/editor/sources"        element={<ManageSources />} />
@@ -72,7 +73,8 @@ function App() {
 
                     {/*USER-only routes*/}
                     <Route element={<ProtectedRoute allowedRoles={['USER']} />}>
-                        <Route path="/user/home" element={<UserHome />} />
+                        <Route path="/user/home"       element={<UserHome />} />
+                        <Route path="/user/onboarding" element={<UserOnboarding />} />
                     </Route>
 
                     {/* Catch-all → login */}

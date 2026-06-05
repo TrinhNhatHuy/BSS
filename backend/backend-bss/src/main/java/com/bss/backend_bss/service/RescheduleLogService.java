@@ -4,6 +4,7 @@ import com.bss.backend_bss.dto.reschedulelog.RescheduleLogFilter;
 import com.bss.backend_bss.dto.reschedulelog.RescheduleLogResponse;
 import com.bss.backend_bss.entity.Channel;
 import com.bss.backend_bss.entity.RescheduleLog;
+import com.bss.backend_bss.exception.ResourceNotFoundException;
 import com.bss.backend_bss.repository.ChannelRepository;
 import com.bss.backend_bss.repository.RescheduleLogRepository;
 import com.bss.backend_bss.specification.RescheduleLogSpecifications;
@@ -41,6 +42,19 @@ public class RescheduleLogService {
 
         Map<String, String> channelNames = lookupChannelNames(page.getContent());
         return page.map(log -> toResponse(log, channelNames));
+    }
+
+    /**
+     * A single reschedule-log entry, for the change-detail page. Resolves the
+     * channel name the same way the list does (one lookup), and 404s if the id
+     * doesn't exist.
+     */
+    @Transactional(readOnly = true)
+    public RescheduleLogResponse getById(Long id) {
+        RescheduleLog log = rescheduleLogRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Reschedule log not found: " + id));
+        Map<String, String> channelNames = lookupChannelNames(List.of(log));
+        return toResponse(log, channelNames);
     }
 
     private Map<String, String> lookupChannelNames(List<RescheduleLog> logs) {

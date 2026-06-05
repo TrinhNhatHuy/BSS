@@ -1,4 +1,15 @@
 services:
+  ml-service:
+    build:
+      context: .
+      dockerfile: ./ml-service/Dockerfile
+    container_name: tv360_ml_service
+    ports:
+      - "5005:5005"
+    restart: unless-stopped
+    networks:
+      - bss-network
+
   backend:
     build:
       context: ./backend/backend-bss
@@ -13,6 +24,10 @@ services:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE}
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRATION=${JWT_EXPIRATION}
+      # Reach the ML service by its compose service name (in-network DNS).
+      - ML_SERVICE_URL=http://ml-service:5005
+    depends_on:
+      - ml-service
     restart: unless-stopped
     networks:
       - bss-network
