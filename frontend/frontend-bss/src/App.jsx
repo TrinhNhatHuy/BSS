@@ -11,20 +11,18 @@ import ProgramIndex    from './pages/ProgramIndex.jsx';
 import ProgramDetails  from './pages/ProgramDetails.jsx';
 import ManageSources   from './pages/ManageSource.jsx';
 import RescheduleLogs  from './pages/RescheduleLogs.jsx';
+import DraftsByAI      from './pages/DraftsByAI.jsx';
 import ChannelRescheduleLogs from './pages/ChannelRescheduleLogs.jsx';
 import RescheduleLogDetail   from './pages/RescheduleLogDetail.jsx';
 import ExportXLSX      from './pages/ExportXLSX.jsx';
 import AccountSettings from './pages/AccountSettings.jsx';
 import UserHome        from './pages/UserHome.jsx';
+import UserChannels    from './pages/UserChannels.jsx';
+import UserViewChannel from './pages/UserViewChannel.jsx';
 import UserOnboarding  from './pages/UserOnboarding.jsx';
+import UserAccount     from './pages/UserAccount.jsx';
+import AdminAccounts   from './pages/AdminAccounts.jsx';
 import Unauthorized    from './pages/Unauthorized';
-
-// Placeholders — replace with real pages when you build them
-const AdminDashboard = () => (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 font-sans">
-        <p className="text-gray-400 text-lg">Admin Dashboard — coming soon</p>
-    </div>
-);
 
 /**
  * App.jsx — routing root.
@@ -51,8 +49,8 @@ function App() {
                     <Route path="/login"        element={<AuthPage />} />
                     <Route path="/unauthorized" element={<Unauthorized />} />
 
-                    {/* EDITOR-only routes */}
-                    <Route element={<ProtectedRoute allowedRoles={['EDITOR']} />}>
+                    {/* EDITOR routes — ADMIN shares the full editor app */}
+                    <Route element={<ProtectedRoute allowedRoles={['EDITOR', 'ADMIN']} />}>
                         <Route path="/editor/dashboard"      element={<EditorDashboard />} />
                         <Route path="/editor/channels"       element={<ManageChannels />} />
                         <Route path="/editor/channels/:id"   element={<ViewChannel />} />
@@ -60,21 +58,26 @@ function App() {
                         <Route path="/editor/channels/:id/reschedule-logs/:logId"  element={<RescheduleLogDetail />} />
                         <Route path="/editor/programs"       element={<ProgramIndex />} />
                         <Route path="/editor/programs/:id"   element={<ProgramDetails />} />
+                        <Route path="/editor/drafts"         element={<DraftsByAI />} />
                         <Route path="/editor/sources"        element={<ManageSources />} />
                         <Route path="/editor/reschedule-logs" element={<RescheduleLogs />} />
                         <Route path="/editor/export"          element={<ExportXLSX />} />
                         <Route path="/editor/account"         element={<AccountSettings />} />
                     </Route>
 
-                    {/* ADMIN-only routes*/}
+                    {/* ADMIN-only routes (the account-management tab) */}
                     <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
-                        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                        <Route path="/admin/accounts" element={<AdminAccounts />} />
+                        <Route path="/admin/dashboard" element={<Navigate to="/editor/dashboard" replace />} />
                     </Route>
 
                     {/*USER-only routes*/}
                     <Route element={<ProtectedRoute allowedRoles={['USER']} />}>
-                        <Route path="/user/home"       element={<UserHome />} />
-                        <Route path="/user/onboarding" element={<UserOnboarding />} />
+                        <Route path="/user/home"          element={<UserHome />} />
+                        <Route path="/user/channels"      element={<UserChannels />} />
+                        <Route path="/user/channels/:id"  element={<UserViewChannel />} />
+                        <Route path="/user/account"       element={<UserAccount />} />
+                        <Route path="/user/onboarding"    element={<UserOnboarding />} />
                     </Route>
 
                     {/* Catch-all → login */}

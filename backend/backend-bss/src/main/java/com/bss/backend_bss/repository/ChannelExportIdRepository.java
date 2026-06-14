@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Read access to channel_export_id rows.
@@ -22,4 +23,8 @@ public interface ChannelExportIdRepository
 
     @Query("SELECT ce FROM ChannelExportId ce WHERE ce.channel.id IN :channelIds")
     List<ChannelExportId> findByChannelIds(@Param("channelIds") Collection<String> channelIds);
+
+    /** A single channel's export id of a given type (e.g. TV360 for watch links). */
+    Optional<ChannelExportId> findByChannel_IdAndType(
+            String channelId, ChannelExportId.ExportType type);
 }

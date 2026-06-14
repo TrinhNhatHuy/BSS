@@ -57,6 +57,20 @@ public class User {
     @Column(name = "status", nullable = false)
     private Boolean status = true;
 
+    /**
+     * Telegram chat id to deliver reminders to, set once the user links their
+     * account by pressing Start on the bot. Null = not connected.
+     */
+    @Column(name = "telegram_chat_id", length = 50)
+    private String telegramChatId;
+
+    /**
+     * One-time code embedded in the bot deep link; matched when the user starts
+     * the bot to bind {@link #telegramChatId}. Cleared after a successful link.
+     */
+    @Column(name = "telegram_link_code", length = 20)
+    private String telegramLinkCode;
+
     @Column(name = "create_time")
     private LocalDateTime createTime;
 

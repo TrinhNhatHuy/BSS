@@ -60,6 +60,34 @@
 			<version>5.2.5</version>
 		</dependency>
 
+		<!-- ── Web Push (VAPID) for reminder notifications ────── -->
+		<!-- Replace web-push's legacy bouncycastle (jdk15on) with jdk18on for Java 21. -->
+		<dependency>
+			<groupId>nl.martijndwars</groupId>
+			<artifactId>web-push</artifactId>
+			<version>5.1.1</version>
+			<exclusions>
+				<exclusion>
+					<groupId>org.bouncycastle</groupId>
+					<artifactId>bcprov-jdk15on</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>org.bouncycastle</groupId>
+					<artifactId>bcpkix-jdk15on</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcprov-jdk18on</artifactId>
+			<version>1.78.1</version>
+		</dependency>
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcpkix-jdk18on</artifactId>
+			<version>1.78.1</version>
+		</dependency>
+
 		<!-- ── JWT (jjwt 0.12.x) ─────────────────────────────── -->
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>

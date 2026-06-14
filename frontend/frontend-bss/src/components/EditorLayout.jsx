@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Menu, ChevronDown, ChevronRight, LayoutDashboard,
-    Settings, PenTool, X, LogOut, User
+    Settings, PenTool, X, LogOut, User, Users
 } from 'lucide-react';
 import useAuth from '../hooks/useAuth.js';
 
@@ -79,7 +79,7 @@ export default function EditorLayout({ activeItem, breadcrumb, headerRight, chil
                                 <p onClick={() => navigate('/editor/programs')} className={subItemClass('programs')}>Programs</p>
                                 <p onClick={() => navigate('/editor/sources')} className={subItemClass('sources')}>Sources</p>
                                 <p onClick={() => navigate('/editor/reschedule-logs')} className={subItemClass('reschedule-logs')}>Reschedule Logs</p>
-                                <p className={subItemClass('drafts')}>Drafts by AI</p>
+                                <p onClick={() => navigate('/editor/drafts')} className={subItemClass('drafts')}>Drafts by AI</p>
                             </div>
                         )}
                     </div>
@@ -100,6 +100,18 @@ export default function EditorLayout({ activeItem, breadcrumb, headerRight, chil
                             </div>
                         )}
                     </div>
+
+                    {/* Accounts — ADMIN only (manage editor/user accounts) */}
+                    {user?.role === 'ADMIN' && (
+                        <button
+                            onClick={() => navigate('/admin/accounts')}
+                            className={`w-full flex items-center gap-3 p-3 rounded-lg text-[#4A533E] font-medium text-left transition-colors ${
+                                activeItem === 'accounts' ? 'bg-[#C3CEAA]/40 font-semibold' : 'hover:bg-[#C3CEAA]/30'
+                            }`}
+                        >
+                            <Users className="w-5 h-5" /> Accounts
+                        </button>
+                    )}
                 </div>
 
                 {/* Footer: account + settings + logout */}

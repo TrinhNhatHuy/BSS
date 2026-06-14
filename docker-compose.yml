@@ -26,6 +26,12 @@ services:
       - JWT_EXPIRATION=${JWT_EXPIRATION}
       # Reach the ML service by its compose service name (in-network DNS).
       - ML_SERVICE_URL=http://ml-service:5005
+      # Reminder notifications (Web Push VAPID + Telegram)
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:admin@bss.local}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - APP_REMINDER_ZONE=${APP_REMINDER_ZONE:-Asia/Ho_Chi_Minh}
     depends_on:
       - ml-service
     restart: unless-stopped
@@ -36,6 +42,9 @@ services:
     build:
       context: ./frontend/frontend-bss
       dockerfile: Dockerfile
+      args:
+        # n8n "AI Controller" webhook for Clean-with-AI. Change in .env at deploy.
+        VITE_AI_CONTROLLER_URL: ${VITE_AI_CONTROLLER_URL:-http://123.30.48.228:5679/webhook/ai-controller}
     container_name: tv360_frontend
     ports:
       - "3000:80"

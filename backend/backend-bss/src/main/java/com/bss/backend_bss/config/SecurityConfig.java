@@ -69,8 +69,10 @@ public class SecurityConfig {
                         // Public: login, register, any future /api/auth/* endpoints
                         .requestMatchers("/api/auth/**").permitAll()
 
-                        // EDITOR-only: schedule management, draft batches, AI review
-                        .requestMatchers("/api/editor/**").hasRole("EDITOR")
+                        // Schedule management, draft batches, AI review.
+                        // ADMIN gets the full editor experience too (the ADMIN page
+                        // reuses every editor screen + an extra account-management tab).
+                        .requestMatchers("/api/editor/**").hasAnyRole("EDITOR", "ADMIN")
 
                         // ADMIN-only: user management, source management, system config
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")

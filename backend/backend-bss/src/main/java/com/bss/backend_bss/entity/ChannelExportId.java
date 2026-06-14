@@ -58,7 +58,13 @@ public class ChannelExportId {
     }
 
     public enum ExportType {
-        HD, SD, None
+        HD, SD, None,
+        /**
+         * tv360.vn deep-link mapping. {@code externalId} holds the channel's
+         * canonical tv360 URL (e.g. {@code https://tv360.vn/tv/vtv2-hd?ch=3}); the
+         * USER "Watch on tv360" link is built from it. See Tv360Service.
+         */
+        TV360
     }
 
     /**

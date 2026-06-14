@@ -1,6 +1,7 @@
 package com.bss.backend_bss.repository;
 
 import com.bss.backend_bss.entity.Program;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -29,6 +30,31 @@ public interface ProgramRepository
      */
     List<Program> findByDraftBatchIdIsNullAndBeginTimeStartingWithOrderByBeginTimeAscChannelIdAsc(
             String dateYyyymmdd);
+
+    /**
+     * All programs belonging to one AI draft batch, in air order — backs the
+     * draft review panel and the approve/replace flow.
+     */
+    List<Program> findByDraftBatchIdOrderByBeginTimeAsc(Long draftBatchId);
+
+    /** How many programs a draft batch holds (for the batch summary list). */
+    long countByDraftBatchId(Long draftBatchId);
+
+    /**
+     * Live (non-draft) programs whose begin_time is in [from, to] (inclusive
+     * YYYYMMDDHHMMSS), soonest first, capped via {@code pageable}. Backs the USER
+     * home "candidate pool" — only the next slice of upcoming programs is loaded
+     * and labeled, instead of the whole day across every channel.
+     */
+    List<Program> findByDraftBatchIdIsNullAndBeginTimeBetweenOrderByBeginTimeAsc(
+            String from, String to, Pageable pageable);
+
+    /**
+     * Like the above but only the still-unlabeled ones (category IS NULL). Backs
+     * the background label warm-up so the home request finds labels already cached.
+     */
+    List<Program> findByDraftBatchIdIsNullAndCategoryIsNullAndBeginTimeBetweenOrderByBeginTimeAsc(
+            String from, String to, Pageable pageable);
 
     /**
      * Live (non-draft) program counts grouped by channel for programs whose

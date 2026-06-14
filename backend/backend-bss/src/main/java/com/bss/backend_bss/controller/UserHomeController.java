@@ -1,5 +1,7 @@
 package com.bss.backend_bss.controller;
 
+import com.bss.backend_bss.dto.user.HomeFilter;
+import com.bss.backend_bss.dto.user.HomeProgramResponse;
 import com.bss.backend_bss.dto.user.HomeResponse;
 import com.bss.backend_bss.entity.Program;
 import com.bss.backend_bss.security.CustomUserDetails;
@@ -10,6 +12,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
@@ -29,15 +32,33 @@ public class UserHomeController {
     private static final DateTimeFormatter YYYYMMDD = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     private final UserHomeService userHomeService;
+    private final ZoneId reminderZone;
 
     @GetMapping("/home")
     public ResponseEntity<HomeResponse> home(
             @AuthenticationPrincipal CustomUserDetails me,
             @RequestParam(required = false) String date
     ) {
-        LocalDate target = (date == null || date.isBlank()) ? LocalDate.now() : LocalDate.parse(date);
+        // Default "today" in the program/reminder zone (containers run UTC).
+        LocalDate target = (date == null || date.isBlank()) ? LocalDate.now(reminderZone) : LocalDate.parse(date);
         return ResponseEntity.ok(
                 userHomeService.getHome(me.getUser().getId(), target.format(YYYYMMDD), target.toString()));
+    }
+
+    /**
+     * GET /api/user/home/filter — the home filter bar. Returns a personalized,
+     * recommendation-ranked program list for the chosen date matching the given
+     * filters (category, channel, bookmarked/reminded, time range, name/content).
+     */
+    @GetMapping("/home/filter")
+    public ResponseEntity<List<HomeProgramResponse>> filter(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @ModelAttribute HomeFilter filter
+    ) {
+        LocalDate target = (filter.getDate() == null || filter.getDate().isBlank())
+                ? LocalDate.now(reminderZone) : LocalDate.parse(filter.getDate());
+        return ResponseEntity.ok(
+                userHomeService.getFiltered(me.getUser().getId(), target.format(YYYYMMDD), filter));
     }
 
     @GetMapping("/categories")

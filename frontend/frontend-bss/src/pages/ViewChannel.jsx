@@ -1,13 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     ChevronRight, ChevronLeft, Calendar, RefreshCw, ArrowLeft,
     MonitorPlay, AlertCircle, Loader2, Sparkles, Eye, History, FileSpreadsheet,
-    Edit2, Trash2, Save, X
+    Edit2, Trash2, Save, X, CheckCircle2, Clock, FileStack
 } from 'lucide-react';
 import EditorLayout from '../components/EditorLayout';
+import DraftReviewModal from '../components/DraftReviewModal';
 import { getChannelById, getChannelGroups, updateChannel, renameChannel, deleteChannel } from '../api/channelApi';
 import { getProgramsForChannel } from '../api/programApi';
+import { triggerAiClean } from '../api/aiApi';
+import { getDraftBatches } from '../api/draftBatchApi';
 
 /** YYYYMMDDHHMMSS → "YYYY-MM-DD HH:MM:SS" ('' if missing/invalid) */
 function formatFull(s) {
@@ -68,7 +71,16 @@ export default function ViewChannel() {
 
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [refreshKey, setRefreshKey] = useState(0);
-    const [aiNotice, setAiNotice] = useState(false);
+
+    // --- Clean with AI (non-blocking: runs in the background) ---
+    const [aiCleaning, setAiCleaning] = useState(false);  // webhook request in flight
+    const [aiError, setAiError] = useState(null);
+    const [aiSuccess, setAiSuccess] = useState(null);
+
+    // AI draft batches awaiting review for this channel
+    const [drafts, setDrafts] = useState([]);
+    const [draftsLoading, setDraftsLoading] = useState(false);
+    const [reviewDraftId, setReviewDraftId] = useState(null);  // open review modal, or null
 
     // Channel groups for the Modify picker
     const [channelGroups, setChannelGroups] = useState([]);
@@ -116,6 +128,47 @@ export default function ViewChannel() {
             });
         return () => { cancelled = true; };
     }, [id, selectedDate, refreshKey]);
+
+    // Load AI draft batches awaiting review for this channel (mount + refresh).
+    // State is only set in the async callbacks (no sync setState in the effect).
+    useEffect(() => {
+        let cancelled = false;
+        getDraftBatches(id)
+            .then(data => { if (!cancelled) setDrafts(data); })
+            .catch(() => { if (!cancelled) setDrafts([]); });
+        return () => { cancelled = true; };
+    }, [id, refreshKey]);
+
+    // Reload used by handlers (after a clean, or edits inside the review modal).
+    // Safe to toggle the loading flag here — not called from an effect body.
+    const loadDrafts = useCallback(() => {
+        setDraftsLoading(true);
+        return getDraftBatches(id)
+            .then(data => setDrafts(data))
+            .catch(() => setDrafts([]))
+            .finally(() => setDraftsLoading(false));
+    }, [id]);
+
+    // Fire the AI cleaning workflow for the viewed date. Non-blocking: the request
+    // runs in the background (a banner shows progress) so the editor can keep
+    // working. The n8n workflow writes a draft_batch to the DB; on completion we
+    // reload the drafts list so the new draft appears for review.
+    const handleClean = async () => {
+        setAiError(null);
+        setAiSuccess(null);
+        setAiCleaning(true);
+        try {
+            const { message } = await triggerAiClean(id, toIsoDate(selectedDate));
+            setAiSuccess(message || 'AI draft created. Review it below.');
+            await loadDrafts();
+        } catch (err) {
+            setAiError(err.message || 'AI cleaning failed. Please try again.');
+            // A draft may still have been written before the failure — refresh anyway.
+            loadDrafts();
+        } finally {
+            setAiCleaning(false);
+        }
+    };
 
     const changeDate = (deltaDays) => {
         const next = new Date(selectedDate);
@@ -307,6 +360,56 @@ export default function ViewChannel() {
                 </div>
 
                 {/* ============================================================ */}
+                {/* AI DRAFT SCHEDULES — pending review                          */}
+                {/* ============================================================ */}
+                {drafts.length > 0 && (
+                    <div className="bg-white rounded-xl shadow-sm border border-[#E4E3CE] overflow-hidden">
+                        <div className="p-4 border-b border-gray-100 bg-[#F4F5F0] flex items-center gap-2">
+                            <FileStack className="w-5 h-5 text-[#94A973]" />
+                            <h3 className="font-bold text-[#2C3325]">AI Draft Schedules</h3>
+                            <span className="text-xs font-semibold text-[#6C755E] bg-white border border-[#E4E3CE] rounded-full px-2 py-0.5">
+                                {drafts.length} pending review
+                            </span>
+                            {draftsLoading && <Loader2 className="w-4 h-4 animate-spin text-[#94A973]" />}
+                        </div>
+                        <ul className="divide-y divide-gray-100">
+                            {drafts.map(d => (
+                                <li key={d.id} className="p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-[#FAFAFA] transition-colors">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <span className="font-mono text-sm text-gray-400">#{d.id}</span>
+                                        <div className="min-w-0">
+                                            <p className="font-semibold text-[#2C3325] flex items-center gap-2 flex-wrap">
+                                                {d.programDate || '—'}
+                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-bold rounded-full border ${
+                                                    d.status === 'PROCESSING'
+                                                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                                        : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                }`}>
+                                                    {d.status === 'PROCESSING' && <Loader2 className="w-3 h-3 animate-spin" />}
+                                                    {d.status}
+                                                </span>
+                                            </p>
+                                            <p className="text-xs text-[#6C755E] mt-0.5 flex items-center gap-1">
+                                                <Clock className="w-3 h-3" />
+                                                {d.programCount} program{d.programCount === 1 ? '' : 's'}
+                                                {d.createTime && <> · created {formatDateTime(d.createTime)}</>}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setReviewDraftId(d.id)}
+                                        className="flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg bg-[#94A973] text-white hover:bg-[#7e9460] transition-colors shadow-sm"
+                                        title="Review, edit, approve or delete this draft"
+                                    >
+                                        <Eye className="w-4 h-4" /> Review
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+
+                {/* ============================================================ */}
                 {/* BROADCAST TIMELINE — below                                   */}
                 {/* ============================================================ */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col min-h-[400px]">
@@ -323,11 +426,13 @@ export default function ViewChannel() {
                         <div className="flex flex-wrap items-center gap-2">
                             {/* Clean with AI */}
                             <button
-                                onClick={() => setAiNotice(true)}
-                                className="flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg bg-[#94A973] text-white hover:bg-[#7e9460] transition-colors shadow-sm"
-                                title="Run AI cleaning on this channel's schedule"
+                                onClick={handleClean}
+                                disabled={aiCleaning}
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-bold rounded-lg bg-[#94A973] text-white hover:bg-[#7e9460] transition-colors shadow-sm disabled:opacity-60"
+                                title="Run AI cleaning on this channel's schedule for the selected date"
                             >
-                                <Sparkles className="w-4 h-4" /> Clean with AI
+                                {aiCleaning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                                {aiCleaning ? 'Cleaning…' : 'Clean with AI'}
                             </button>
 
                             {/* Export this channel's schedule for the viewed date */}
@@ -377,12 +482,29 @@ export default function ViewChannel() {
                         </div>
                     </div>
 
-                    {/* Clean-with-AI notice (no AI backend wired yet) */}
-                    {aiNotice && (
+                    {/* Clean-with-AI status banners — non-blocking; the request runs
+                        in the background while the editor keeps using the page. */}
+                    {aiCleaning && (
                         <div className="m-4 flex items-start gap-2 p-3 bg-[#F4F5F0] border border-[#E4E3CE] rounded-lg text-[#4A533E] text-sm">
-                            <Sparkles className="w-4 h-4 shrink-0 mt-0.5 text-[#94A973]" />
-                            <span className="flex-1">AI cleaning isn’t connected to a backend yet — this button is a placeholder for the upcoming schedule-cleaning pipeline.</span>
-                            <button onClick={() => setAiNotice(false)} className="text-[#6C755E] hover:text-[#2C3325] font-bold">×</button>
+                            <Loader2 className="w-4 h-4 shrink-0 mt-0.5 text-[#94A973] animate-spin" />
+                            <span className="flex-1">
+                                AI is cleaning this schedule — this can take a minute. You can keep working;
+                                the result will appear under <span className="font-semibold">AI Draft Schedules</span> when it’s ready.
+                            </span>
+                        </div>
+                    )}
+                    {aiSuccess && (
+                        <div className="m-4 flex items-start gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-sm">
+                            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                            <span className="flex-1">{aiSuccess}</span>
+                            <button onClick={() => setAiSuccess(null)} className="text-emerald-600 hover:text-emerald-800 font-bold">×</button>
+                        </div>
+                    )}
+                    {aiError && (
+                        <div className="m-4 flex items-start gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
+                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                            <span className="flex-1">{aiError}</span>
+                            <button onClick={() => setAiError(null)} className="text-rose-600 hover:text-rose-800 font-bold">×</button>
                         </div>
                     )}
 
@@ -594,6 +716,23 @@ export default function ViewChannel() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* ============================================================ */}
+            {/* AI DRAFT REVIEW MODAL                                        */}
+            {/* ============================================================ */}
+            {reviewDraftId != null && (
+                <DraftReviewModal
+                    draftId={reviewDraftId}
+                    onClose={() => setReviewDraftId(null)}
+                    onChanged={loadDrafts}
+                    onResolved={() => {
+                        setReviewDraftId(null);
+                        // Refresh both the live schedule and the drafts list (a draft was
+                        // approved → live programs changed, or deleted → it's gone).
+                        setRefreshKey(k => k + 1);
+                    }}
+                />
             )}
         </EditorLayout>
     );

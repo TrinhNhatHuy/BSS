@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react'; // +Loader2
 import { useNavigate } from 'react-router-dom';                    // NEW
 import useAuth from '../hooks/useAuth';                            // NEW
@@ -15,7 +15,7 @@ import useAuth from '../hooks/useAuth';                            // NEW
 
 const ROLE_DESTINATIONS = {
     EDITOR: '/editor/dashboard',
-    ADMIN:  '/admin/dashboard',
+    ADMIN:  '/editor/dashboard', // ADMIN reuses the full editor app (+ an Accounts tab)
     USER:   '/user/home',
 };
 

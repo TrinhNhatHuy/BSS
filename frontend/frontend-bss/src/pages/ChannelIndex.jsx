@@ -67,7 +67,7 @@ function ExportIdsFields({ rows, exportTypes, onChange }) {
             </div>
 
             {rows.length === 0 ? (
-                <p className="text-xs text-gray-400">No export IDs. These are the channel&apos;s external broadcast IDs included in the XLSX export.</p>
+                <p className="text-xs text-gray-400">No export IDs. HD/SD/None are external broadcast IDs in the XLSX export; TV360 holds the channel&apos;s tv360 URL for the &quot;Watch on tv360&quot; link.</p>
             ) : (
                 <div className="space-y-2">
                     {rows.map((row, i) => (
@@ -86,7 +86,7 @@ function ExportIdsFields({ rows, exportTypes, onChange }) {
                                 type="text"
                                 value={row.externalId}
                                 onChange={(e) => update(i, 'externalId', e.target.value)}
-                                placeholder="External ID"
+                                placeholder={row.type === 'TV360' ? 'https://tv360.vn/tv/<slug>?ch=<id>' : 'External ID'}
                                 maxLength={100}
                                 className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#94A973] text-sm font-mono"
                             />
@@ -143,7 +143,7 @@ export default function ManageChannels() {
 
     // Load export types once for the filter dropdown
     useEffect(() => {
-        getExportTypes().then(setExportTypes).catch(() => setExportTypes(['HD', 'SD', 'None']));
+        getExportTypes().then(setExportTypes).catch(() => setExportTypes(['HD', 'SD', 'None', 'TV360']));
     }, []);
 
     // Debounce all text/dropdown filters together (400ms)

@@ -1,7 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, Bell, ChevronDown, LogOut, SlidersHorizontal } from 'lucide-react';
+import { useNavigate, NavLink } from 'react-router-dom';
+import { Search, Bell, ChevronDown, LogOut, SlidersHorizontal, Home, Tv, UserCircle } from 'lucide-react';
 import useAuth from '../hooks/useAuth.js';
+
+/** Top-nav link styling — olive pill when the route is active. */
+const navLinkClass = ({ isActive }) =>
+    `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+        isActive
+            ? 'bg-[#94A973] text-white'
+            : 'text-[#4A533E] hover:bg-[#F4F5F0]'
+    }`;
 
 /**
  * Top header (BSS logo, search, notifications, avatar menu) plus an optional
@@ -53,6 +61,16 @@ export default function UserLayout({
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-3 sm:gap-4">
                     <h1 className="text-2xl font-bold text-[#2C3325] tracking-tight shrink-0">BSS</h1>
 
+                    {/* Primary nav (desktop) — channel list is always one click away */}
+                    <nav className="hidden md:flex items-center gap-1 shrink-0">
+                        <NavLink to="/user/home" className={navLinkClass}>
+                            <Home className="w-4 h-4" /> Home
+                        </NavLink>
+                        <NavLink to="/user/channels" className={navLinkClass}>
+                            <Tv className="w-4 h-4" /> Channels
+                        </NavLink>
+                    </nav>
+
                     <div className="flex-1 max-w-2xl relative">
                         <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                         <input
@@ -63,7 +81,11 @@ export default function UserLayout({
                         />
                     </div>
 
-                    <button className="relative p-2 text-[#4A533E] hover:bg-gray-100 rounded-full transition-colors" title="Notifications">
+                    <button
+                        onClick={() => navigate('/user/account?tab=reminders')}
+                        className="relative p-2 text-[#4A533E] hover:bg-gray-100 rounded-full transition-colors"
+                        title="My reminders"
+                    >
                         <Bell className="w-5 h-5" />
                         <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full" />
                     </button>
@@ -87,8 +109,29 @@ export default function UserLayout({
                                     </p>
                                     <p className="text-xs text-gray-500">{user?.role}</p>
                                 </div>
+                                {/* Nav fallback for small screens (header nav is hidden < md) */}
+                                <div className="md:hidden border-b border-gray-100 py-1">
+                                    <button
+                                        onClick={() => { setMenuOpen(false); navigate('/user/home'); }}
+                                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[#4A533E] hover:bg-gray-50 transition-colors"
+                                    >
+                                        <Home className="w-4 h-4" /> Home
+                                    </button>
+                                    <button
+                                        onClick={() => { setMenuOpen(false); navigate('/user/channels'); }}
+                                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[#4A533E] hover:bg-gray-50 transition-colors"
+                                    >
+                                        <Tv className="w-4 h-4" /> Channels
+                                    </button>
+                                </div>
                                 <button
-                                    onClick={() => { setMenuOpen(false); navigate('/user/onboarding'); }}
+                                    onClick={() => { setMenuOpen(false); navigate('/user/account'); }}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[#4A533E] hover:bg-gray-50 transition-colors"
+                                >
+                                    <UserCircle className="w-4 h-4" /> My Account
+                                </button>
+                                <button
+                                    onClick={() => { setMenuOpen(false); navigate('/user/account?tab=preferences'); }}
                                     className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[#4A533E] hover:bg-gray-50 transition-colors"
                                 >
                                     <SlidersHorizontal className="w-4 h-4" /> Edit preferences

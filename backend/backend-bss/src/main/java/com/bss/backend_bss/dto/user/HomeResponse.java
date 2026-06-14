@@ -6,14 +6,16 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
-import java.util.Map;
 
 /**
- * GET /api/user/home payload.
+ * GET /api/user/home payload — a small, curated, multi-rail set (not the whole day).
  *
- * Returns the whole day's labeled schedule plus the caller's preferences; the
- * frontend filters by category chip client-side (so switching chips is instant)
- * and defaults the selection to {@code preferences}.
+ * {@code rails} is an ordered list of shelves: "Top picks for you", themed rails
+ * derived from the caller's behavior ("Because you watch …", "More … for you",
+ * "Your shows today"), and "Popular with viewers". {@code personalized} is the
+ * overall flag — false when the caller is cold-start and the picks came from global
+ * popularity instead. {@code upNext} is the soonest upcoming programs on any channel
+ * (the right-rail list).
  */
 @Data
 @Builder
@@ -22,6 +24,7 @@ import java.util.Map;
 public class HomeResponse {
     private String date;                    // yyyy-MM-dd
     private List<String> preferences;       // user's favourite categories
-    private Map<String, Long> categoryCounts; // category -> #programs today
-    private List<HomeProgramResponse> programs;
+    private boolean personalized;           // true = picks came from the caller's behavior
+    private List<HomeRailResponse> rails;
+    private List<HomeProgramResponse> upNext;
 }

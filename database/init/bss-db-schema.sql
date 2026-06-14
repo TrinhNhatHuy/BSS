@@ -26,6 +26,8 @@ CREATE TABLE users (
                        role         VARCHAR(20)  NOT NULL DEFAULT 'USER'
                            CHECK (role IN ('ADMIN', 'EDITOR', 'USER')),
                        status       BOOLEAN      NOT NULL DEFAULT TRUE,
+                       telegram_chat_id   VARCHAR(50) DEFAULT NULL,
+                       telegram_link_code VARCHAR(20) DEFAULT NULL,
                        create_time  TIMESTAMP(6) DEFAULT NULL,
                        update_time  TIMESTAMP(6) DEFAULT NULL,
                        CONSTRAINT uk_username UNIQUE (username),
@@ -241,13 +243,16 @@ CREATE INDEX idx_bookmark_user    ON user_bookmark(user_id);
 CREATE INDEX idx_bookmark_program ON user_bookmark(program_id);
 
 CREATE TABLE user_reminder (
-                               id          BIGSERIAL    PRIMARY KEY,
-                               user_id     BIGINT       NOT NULL,
-                               program_id  BIGINT       NOT NULL,
-                               remind_at   TIMESTAMP(6) NOT NULL,
-                               is_sent     BOOLEAN      NOT NULL DEFAULT FALSE,
-                               create_time TIMESTAMP(6) DEFAULT NULL,
-                               update_time TIMESTAMP(6) DEFAULT NULL,
+                               id             BIGSERIAL    PRIMARY KEY,
+                               user_id        BIGINT       NOT NULL,
+                               program_id     BIGINT       NOT NULL,
+                               remind_at      TIMESTAMP(6) NOT NULL,
+                               minutes_before INTEGER      NOT NULL DEFAULT 0,
+                               channel        VARCHAR(20)  NOT NULL DEFAULT 'WEBPUSH'
+                                   CHECK (channel IN ('WEBPUSH', 'TELEGRAM', 'BOTH')),
+                               is_sent        BOOLEAN      NOT NULL DEFAULT FALSE,
+                               create_time    TIMESTAMP(6) DEFAULT NULL,
+                               update_time    TIMESTAMP(6) DEFAULT NULL,
                                CONSTRAINT uk_user_reminder UNIQUE (user_id, program_id),
                                CONSTRAINT fk_ur_user
                                    FOREIGN KEY (user_id) REFERENCES users(id)
@@ -260,6 +265,23 @@ CREATE TABLE user_reminder (
 CREATE INDEX idx_reminder_user   ON user_reminder(user_id);
 CREATE INDEX idx_reminder_unsent ON user_reminder(remind_at)
     WHERE is_sent = FALSE;
+
+-- Web Push subscriptions — one row per browser/device per user.
+CREATE TABLE push_subscription (
+                               id          BIGSERIAL     PRIMARY KEY,
+                               user_id     BIGINT        NOT NULL,
+                               endpoint    VARCHAR(1000) NOT NULL,
+                               p256dh      VARCHAR(255)  NOT NULL,
+                               auth        VARCHAR(255)  NOT NULL,
+                               user_agent  VARCHAR(500)  DEFAULT NULL,
+                               create_time TIMESTAMP(6)  DEFAULT NULL,
+                               CONSTRAINT uk_push_subscription_endpoint UNIQUE (endpoint),
+                               CONSTRAINT fk_ps_user
+                                   FOREIGN KEY (user_id) REFERENCES users(id)
+                                       ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE INDEX idx_push_subscription_user ON push_subscription(user_id);
 
 CREATE TABLE user_search_log (
                                  id           BIGSERIAL    PRIMARY KEY,
@@ -275,6 +297,40 @@ CREATE TABLE user_search_log (
 CREATE INDEX idx_search_log_user    ON user_search_log(user_id);
 CREATE INDEX idx_search_log_keyword ON user_search_log(keyword);
 CREATE INDEX idx_search_log_time    ON user_search_log(user_id, create_time DESC);
+
+-- Unified implicit-interaction log that powers the personalized USER home page.
+-- One row per behavioral signal (program opened, watched, searched, …). Bookmarks
+-- and reminders live in their own tables (they back UI state + are the strongest
+-- explicit signals); the recommender reads all of them together. Channel/category/
+-- begin_time/program_name are SNAPSHOT at event time so the signal survives the
+-- per-airing rotation of program rows (program may later be deleted -> program_id
+-- set NULL, but the snapshot columns remain analyzable). Insert-only (no update_time).
+CREATE TABLE user_event (
+                            id           BIGSERIAL    PRIMARY KEY,
+                            user_id      BIGINT       NOT NULL,
+                            event_type   VARCHAR(20)  NOT NULL
+                                CHECK (event_type IN ('VIEW', 'CLICK', 'WATCH', 'SEARCH')),
+                            program_id   BIGINT       DEFAULT NULL,
+                            channel_id   VARCHAR(255) DEFAULT NULL,
+                            category     VARCHAR(20)  DEFAULT NULL
+                                CHECK (category IS NULL OR category IN
+                                       ('SeriesVN', 'SeriesFR', 'Kids', 'Music', 'Sports', 'News', 'Others')),
+                            begin_time   VARCHAR(14)  DEFAULT NULL,
+                            program_name VARCHAR(500) DEFAULT NULL,
+                            keyword      VARCHAR(255) DEFAULT NULL,
+                            create_time  TIMESTAMP(6) DEFAULT NULL,
+                            CONSTRAINT fk_ue_user
+                                FOREIGN KEY (user_id) REFERENCES users(id)
+                                    ON UPDATE CASCADE ON DELETE CASCADE,
+                            CONSTRAINT fk_ue_program
+                                FOREIGN KEY (program_id) REFERENCES program(id)
+                                    ON UPDATE CASCADE ON DELETE SET NULL
+);
+
+CREATE INDEX idx_user_event_user     ON user_event(user_id, create_time DESC);
+CREATE INDEX idx_user_event_type     ON user_event(event_type);
+CREATE INDEX idx_user_event_program  ON user_event(program_id);
+CREATE INDEX idx_user_event_category ON user_event(category);
 
 CREATE OR REPLACE FUNCTION fn_set_update_time()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
