@@ -1,0 +1,32 @@
+# Production reverse proxy for BSS.
+#
+# Caddy automatically provisions and renews HTTPS certificates (Let's Encrypt)
+# for the domains below. Requirements:
+#   * the domain's A record points at this server's public IP, and
+#   * ports 80 and 443 are open to the internet.
+#
+# Routing is same-origin, so the browser never makes a cross-site request and
+# there is no CORS to configure:
+#   /webhook/*  -> n8n        (Clean-with-AI pipeline, served over HTTPS)
+#   /api/*      -> backend    (Spring Boot REST API, /api prefix preserved)
+#   everything  -> frontend   (React SPA served by its own nginx)
+
+broadcast-scheduler-system.me, www.broadcast-scheduler-system.me {
+	encode zstd gzip
+
+	# n8n "Clean with AI" webhook. Proxied through the HTTPS site so the browser
+	# call is same-origin and not blocked as mixed (HTTP) content.
+	handle /webhook/* {
+		reverse_proxy tv360_n8n:5678
+	}
+
+	# Spring Boot REST API. proxy keeps the full path (e.g. /api/auth/login).
+	handle /api/* {
+		reverse_proxy backend:8080
+	}
+
+	# React single-page app (static assets + client-side routing fallback).
+	handle {
+		reverse_proxy frontend:80
+	}
+}

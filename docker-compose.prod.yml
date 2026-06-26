@@ -1,0 +1,102 @@
+# Production stack for BSS — serves https://broadcast-scheduler-system.me
+#
+# Run on the server from the repo root:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# This is a STANDALONE file (not an override of docker-compose.yml). It reuses
+# the external networks already created by the n8n and Postgres stacks, so:
+#   * the backend reaches Postgres internally by container name (no public 5433),
+#   * Caddy reaches n8n internally for the Clean-with-AI webhook.
+#
+# Requires the external network "bss-network" to exist:
+#   docker network create bss-network
+
+services:
+  ml-service:
+    build:
+      context: .
+      dockerfile: ./ml-service/Dockerfile
+    container_name: tv360_ml_service
+    restart: unless-stopped
+    networks:
+      - bss-network
+
+  backend:
+    build:
+      context: ./backend/backend-bss
+      dockerfile: Dockerfile
+    container_name: tv360_backend
+    environment:
+      # Postgres reached internally over the Postgres stack's own network,
+      # by container name — never over the public IP.
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://tv360_postgres_cloud:5432/${POSTGRES_DB}
+      - SPRING_DATASOURCE_USERNAME=${POSTGRES_USER}
+      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
+      # Force the prod profile: SQL logging OFF, no DataSeeder. Critical for
+      # clean performance numbers and for not mutating real data.
+      - SPRING_PROFILES_ACTIVE=prod
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION=${JWT_EXPIRATION}
+      - ML_SERVICE_URL=http://ml-service:5005
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:admin@bss.local}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - APP_REMINDER_ZONE=${APP_REMINDER_ZONE:-Asia/Ho_Chi_Minh}
+    depends_on:
+      - ml-service
+    # Bound to loopback only — lets you `curl localhost:8080` on the server to
+    # debug, without exposing the API publicly (Caddy is the public entrypoint).
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+    networks:
+      - bss-network
+      - bss-postgres
+
+  frontend:
+    build:
+      context: ./frontend/frontend-bss
+      dockerfile: Dockerfile
+      args:
+        # Clean-with-AI webhook via the HTTPS site (Caddy proxies it to n8n).
+        VITE_AI_CONTROLLER_URL: "https://broadcast-scheduler-system.me/webhook/ai-controller"
+    container_name: tv360_frontend
+    restart: unless-stopped
+    networks:
+      - bss-network
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: tv360_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - bss-network
+      - n8n
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  # App network for backend <-> frontend <-> ml-service <-> caddy.
+  bss-network:
+    external: true
+  # Existing network of the Postgres stack (container: tv360_postgres_cloud).
+  bss-postgres:
+    external: true
+    name: bss-postgres_default
+  # Existing network of the n8n stack (container: tv360_n8n).
+  n8n:
+    external: true
+    name: n8n-bss_default

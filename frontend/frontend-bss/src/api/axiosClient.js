@@ -10,7 +10,10 @@ import { getToken, clearAuth } from '../utils/tokenStorage';
  *                (handles expired tokens without any extra logic in components)
  */
 const axiosClient = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
+    // Same-origin in production (browser calls /api/... on the site's own domain,
+    // which Caddy routes to the backend), localhost in `npm run dev`. An explicit
+    // VITE_API_BASE_URL still overrides both if ever needed.
+    baseURL: import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? '' : 'http://localhost:8080'),
     headers: { 'Content-Type': 'application/json' },
 });
 
